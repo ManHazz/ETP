@@ -1,0 +1,27 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: smartbin_db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: smartbin
+      POSTGRES_PASSWORD: smartbin_dev
+      POSTGRES_DB: smartbin
+    volumes:
+      - smartbin_data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    container_name: smartbin_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://smartbin:smartbin_dev@db:5432/smartbin
+    depends_on:
+      - db
+
+volumes:
+  smartbin_data:
