@@ -1,0 +1,64 @@
+name: Deploy
+
+# Triggers:
+#   - Manually from the Actions tab (recommended for the first few runs)
+#   - Automatically after CI finishes on main (uncomment the workflow_run block)
+#
+# Required repo secrets (Settings → Secrets → Actions):
+#   SSH_HOST       – VPS hostname or IP  (e.g. smartbin.example.com)
+#   SSH_USER       – login user          (e.g. deploy)
+#   SSH_KEY        – private key         (contents of ~/.ssh/id_ed25519)
+#   DEPLOY_PATH    – path on VPS         (e.g. /opt/smartbin)
+#
+# The VPS is expected to already have the repo cloned at DEPLOY_PATH and
+# scripts/bootstrap.sh to have been run once (creates certs + credentials).
+# This workflow just pulls the newest images and restarts services.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: latest)"
+        required: false
+        default: latest
+
+  # Uncomment to auto-deploy after CI succeeds on main:
+  # workflow_run:
+  #   workflows: ["CI"]
+  #   types: [completed]
+  #   branches: [main]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false      # never cut off a running deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # if triggered by workflow_run, only run on successful CI
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: production
+    steps:
+      - name: SSH + pull + restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_KEY }}
+          # Fail on any non-zero exit; -o pipefail catches broken pipelines.
+          script_stop: true
+          envs: IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}/backend"
+            git fetch --quiet origin main
+            git reset --hard origin/main
+            export IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+            echo "→ pulling images (tag=$IMAGE_TAG)"
+            docker compose -f docker-compose.prod.yml pull
+            echo "→ restarting services"
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            echo "→ pruning old images"
+            docker image prune -f
+            echo "→ service status"
+            docker compose -f docker-compose.prod.yml ps

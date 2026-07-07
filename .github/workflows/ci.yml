@@ -71,15 +71,22 @@ jobs:
         working-directory: backend
         run: docker compose config -q
 
-  # ── Publish: build+push backend image on merges to main ───────
-  publish-image:
-    name: Publish backend image
+  # ── Publish: build+push both images on merges to main ─────────
+  publish-images:
+    name: Publish images
     needs: [backend, frontend, compose-validate]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - name: api
+            context: ./backend
+          - name: web
+            context: ./frontend
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -91,14 +98,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Compute lowercase image name
         id: img
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/api" >> "$GITHUB_OUTPUT"
-      - name: Build & push
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+      - name: Build & push ${{ matrix.name }}
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: ${{ matrix.context }}
           push: true
           tags: |
             ${{ steps.img.outputs.name }}:latest
             ${{ steps.img.outputs.name }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

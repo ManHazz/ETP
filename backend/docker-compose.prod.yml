@@ -1,0 +1,107 @@
+# Production stack — run on a VPS with a public IP and a domain pointing at it.
+#
+# Usage:
+#   ./scripts/bootstrap.sh              # certs + credentials (first run only)
+#   cp .env.example .env && vi .env     # set DOMAIN, MQTT_HOST_PORT etc.
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# What's exposed to the internet:
+#   80/tcp   – Caddy (HTTP → HTTPS redirect + ACME challenge)
+#   443/tcp  – Caddy (dashboard + /api/*)
+#   8883/tcp – Mosquitto (TLS-only MQTT for ESP32s)
+#
+# What's NOT exposed to the internet:
+#   5432 (Postgres) and 1883 (plaintext MQTT) stay on the internal docker
+#   network. Nothing else.
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: smartbin_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smartbin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: smartbin
+    volumes:
+      - smartbin_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartbin -d smartbin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: smartbin_mqtt
+    restart: unless-stopped
+    ports:
+      - "8883:8883"     # TLS listener — the only MQTT port on the internet
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./mosquitto/certs:/mosquitto/certs:ro
+      - smartbin_mqtt_data:/mosquitto/data
+      - smartbin_mqtt_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 1883 -u \"$$MQTT_USERNAME\" -P \"$$MQTT_PASSWORD\" -t smartbin/api/status -m healthcheck -q 1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    env_file:
+      - .env.secrets
+
+  api:
+    # Published by GitHub Actions on every merge to main.
+    image: ghcr.io/manhazz/etp/api:${IMAGE_TAG:-latest}
+    container_name: smartbin_api
+    restart: unless-stopped
+    # No host ports — Caddy is the only ingress path for the API.
+    environment:
+      DATABASE_URL: postgresql://smartbin:${POSTGRES_PASSWORD:?}@db:5432/smartbin
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 8883
+      MQTT_TLS: "true"
+      MQTT_CA_CERT: /app/certs/ca.crt
+      MQTT_TLS_INSECURE: "false"
+      MQTT_TOPIC: smartbin/+/telemetry
+      MQTT_CLIENT_ID: smartbin-api
+      MQTT_QOS: 1
+    env_file:
+      - .env.secrets
+    volumes:
+      - ./mosquitto/certs/ca.crt:/app/certs/ca.crt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+
+  web:
+    # Published by GitHub Actions on every merge to main.
+    image: ghcr.io/manhazz/etp/web:${IMAGE_TAG:-latest}
+    container_name: smartbin_web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"    # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set in .env (e.g. smartbin.example.com)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  smartbin_data:
+  smartbin_mqtt_data:
+  smartbin_mqtt_log:
+  caddy_data:
+  caddy_config:

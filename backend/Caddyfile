@@ -1,0 +1,55 @@
+# Caddyfile — public edge for the SmartBin stack.
+#
+# ${DOMAIN} is substituted from the environment when compose starts Caddy.
+# Set DOMAIN in .env, e.g. DOMAIN=smartbin.example.com
+#
+# Caddy automatically obtains and renews a Let's Encrypt certificate for
+# ${DOMAIN} using the ACME HTTP-01 challenge (needs ports 80 + 443 reachable
+# from the internet). Certs are stored in the caddy_data volume.
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    # ── FastAPI ──────────────────────────────────────────────────
+    # Proxy API traffic to the api service on the internal network.
+    handle_path /api/* {
+        reverse_proxy api:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # FastAPI OpenAPI docs (handy — remove these two blocks to hide in prod)
+    handle /docs           { reverse_proxy api:8000 }
+    handle /openapi.json   { reverse_proxy api:8000 }
+    handle /health         { reverse_proxy api:8000 }
+
+    # ── React SPA ────────────────────────────────────────────────
+    # Everything else serves the built dashboard. try_files gives SPA
+    # deep-links (e.g. /route) a working refresh.
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+
+    # ── Security headers ────────────────────────────────────────
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options    nosniff
+        X-Frame-Options           DENY
+        Referrer-Policy           strict-origin-when-cross-origin
+        Permissions-Policy        "geolocation=(), microphone=(), camera=()"
+        # Loose CSP: allow self + inline styles/imgs Leaflet needs, plus
+        # the CARTO tile CDN. Tighten if you replace the map layer.
+        Content-Security-Policy   "default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; script-src 'self'"
+        -Server
+    }
+
+    # Access log to stdout so `docker compose logs web` shows requests.
+    log {
+        output stdout
+        format console
+    }
+}

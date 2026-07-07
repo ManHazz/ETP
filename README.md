@@ -229,40 +229,105 @@ By default GHCR packages are private. In GitHub → Packages → your image →
 Package settings, set visibility to Public if you want ESP32s (or you) to pull
 without a token, or generate a PAT with `read:packages` for the puller.
 
-### Deploying (any Docker host)
+### Public deployment (VPS + auto-HTTPS)
 
-Once the image exists on GHCR, publishing the website to a VPS is a single
-line on the host:
+For real ESP32s to reach the site, you need a public IP, a domain, and one
+Linux host with Docker. The `backend/docker-compose.prod.yml` overlay puts
+[Caddy](https://caddyserver.com) at the edge — it obtains and renews a
+Let's Encrypt cert automatically, serves the React SPA, and reverse-proxies
+`/api/*` to FastAPI.
+
+**Architecture in production**
+
+```
+Internet ─┬─► :80  ─► Caddy ──► HTTP→HTTPS redirect
+          ├─► :443 ─► Caddy ─┬─► /api/*  →  api:8000 (FastAPI)
+          │                   └─► /*       →  static dist (React)
+          └─► :8883 ─► Mosquitto (TLS, per-device auth + ACL)
+
+Not exposed to the internet:
+   :5432  Postgres  (docker internal only)
+   :1883  MQTT plaintext  (docker internal only)
+```
+
+**One-time setup on the VPS**
 
 ```bash
-# On the target VPS, first time only
-git clone <repo> smartbin && cd smartbin/backend
+# 1. Provision a small VPS (any provider). Point an A record at it,
+#    e.g.  smartbin.example.com → 203.0.113.5
+
+# 2. On the VPS
+sudo apt install docker.io docker-compose-v2 git openssl -y
+git clone https://github.com/ManHazz/ETP.git /opt/smartbin
+cd /opt/smartbin/backend
+
+# 3. Configure
 cp .env.example .env
+$EDITOR .env                 # set DOMAIN and POSTGRES_PASSWORD
+
+# 4. Generate certs + credentials (writes .env.secrets, mosquitto/passwd)
 ./scripts/bootstrap.sh
 
-# Edit docker-compose.yml so the api service uses the published image
-# instead of building locally, e.g.
-#   api:
-#     image: ghcr.io/<owner>/<repo>/api:latest
-#     # (remove the `build: .` line)
+# 5. Open firewall
+sudo ufw allow 80,443,8883/tcp
 
-docker compose up -d
+# 6. Pull images and start the stack
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+
+# 7. Register the campus bins in the DB
+python -m simulator.sim --seed
 ```
 
-Later releases:
+Site is now live at `https://<DOMAIN>` with a real Let's Encrypt cert. ESP32s
+publish to `mqtts://<DOMAIN>:8883` using the CA at `mosquitto/certs/ca.crt`
+plus the per-device credentials printed by `bootstrap.sh` and `add_device.sh`.
 
-```bash
-docker compose pull api && docker compose up -d api
-```
+**Later releases (automatic via GitHub Actions)**
 
-Open ports on the host firewall:
-- `8000/tcp` for the API (or put nginx/Caddy in front for HTTPS + a domain).
-- `8883/tcp` for the MQTT broker so ESP32s can reach it.
-- Do **not** open `5432` (Postgres) or `1883` (plaintext MQTT).
+Configure the secrets in the GitHub repo (Settings → Secrets → Actions):
 
-The React dashboard's `dist/` artefact from CI can be served by any static
-host (Netlify, Vercel, GitHub Pages, or nginx alongside the API). Set its API
-base URL to the public backend URL.
+| Secret | Value |
+|---|---|
+| `SSH_HOST`    | VPS hostname or IP |
+| `SSH_USER`    | login user (e.g. `deploy` or `root`) |
+| `SSH_KEY`     | contents of the private key that user accepts |
+| `DEPLOY_PATH` | absolute path where the repo is cloned (e.g. `/opt/smartbin`) |
+
+Then trigger **Actions → Deploy → Run workflow** for a rolling release, or
+uncomment the `workflow_run` block at the top of `.github/workflows/deploy.yml`
+to auto-deploy after every green CI on `main`. The workflow fetches the
+newest images from GHCR and restarts services in place.
+
+**ESP32 client-side notes**
+
+- Broker host: your `DOMAIN`, TLS on port `8883`.
+- Trust anchor: contents of `backend/mosquitto/certs/ca.crt` (bake into
+  the firmware as a PEM string).
+- Username: the device ID (`BIN001`), password: from `add_device.sh` output.
+- Topic: `smartbin/<DEVICE_ID>/telemetry`, payload as documented above.
+- Publish with QoS 1 for at-least-once delivery; the API subscriber also
+  uses QoS 1 so a brief restart doesn't drop the message.
+
+### Firewall / security posture
+
+| Port | Protocol | Exposed? | Notes |
+|---|---|---|---|
+| 80  | TCP | ✔ | Caddy — HTTP→HTTPS redirect + ACME HTTP-01 challenge |
+| 443 | TCP+UDP | ✔ | Caddy — dashboard + `/api/*`, HTTP/2 + HTTP/3 |
+| 8883 | TCP | ✔ | Mosquitto TLS 1.2, no anonymous, per-device ACL |
+| 8000 | TCP | ✘ | FastAPI — only reachable via Caddy inside the docker network |
+| 5432 | TCP | ✘ | Postgres — docker network only |
+| 1883 | TCP | ✘ | Plaintext MQTT — docker network only |
+| 22   | TCP | (up to you) | SSH — recommended to lock down to key-auth and known IPs |
+
+Additional hardening baked in:
+- Caddy sets HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff,
+  Referrer-Policy strict-origin-when-cross-origin, a Permissions-Policy that
+  denies mic/camera/geolocation, and a Content-Security-Policy scoped to
+  self + the CARTO map tile CDN.
+- Postgres password comes from `POSTGRES_PASSWORD` in `.env`, not defaulted.
+- All broker + API secrets live in `.env.secrets` (mode 600, gitignored).
 
 ### Not GitHub?
 
@@ -297,17 +362,22 @@ project/
 │   │   ├── gen_certs.sh
 │   │   ├── add_device.sh
 │   │   └── bootstrap.sh
-│   ├── docker-compose.yml
+│   ├── docker-compose.yml       (dev)
+│   ├── docker-compose.prod.yml  (public / VPS)
+│   ├── Caddyfile                (edge proxy + auto-HTTPS)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── .env.example
 │   ├── SECURITY.md
 │   └── README.md               (backend-specific notes)
 ├── frontend/
-│   ├── src/                    React app
+│   ├── src/                     React app
+│   ├── Dockerfile               node build + Caddy image
 │   ├── package.json
 │   └── vite.config.js
-├── .github/workflows/ci.yml    CI/CD
+├── .github/workflows/
+│   ├── ci.yml                   backend + frontend build, publishes images
+│   └── deploy.yml               manual/auto deploy to the VPS
 ├── .gitignore
-└── README.md                   (this file)
+└── README.md                    (this file)
 ```
