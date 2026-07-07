@@ -11,6 +11,38 @@ services:
       POSTGRES_DB: smartbin
     volumes:
       - smartbin_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartbin -d smartbin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: smartbin_mqtt
+    restart: unless-stopped
+    # Only the TLS listener is published to the host.
+    # Plaintext 1883 stays internal to the compose network (unauthenticated
+    # traffic never leaves docker). ESP32s connect via TLS on 8883.
+    ports:
+      - "${MQTT_TLS_HOST_PORT:-8883}:8883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./mosquitto/certs:/mosquitto/certs:ro
+      - smartbin_mqtt_data:/mosquitto/data
+      - smartbin_mqtt_log:/mosquitto/log
+    healthcheck:
+      # Auth-required probe: try to publish as the api user on the plaintext
+      # internal listener. Requires .env.secrets to be loaded.
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 1883 -u \"$$MQTT_USERNAME\" -P \"$$MQTT_PASSWORD\" -t smartbin/api/status -m healthcheck -q 1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    env_file:
+      - .env.secrets
 
   api:
     build: .
@@ -20,8 +52,31 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://smartbin:smartbin_dev@db:5432/smartbin
+      # Broker over TLS on the compose network.
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 8883
+      MQTT_TLS: "true"
+      MQTT_CA_CERT: /app/certs/ca.crt
+      # Self-signed cert's SAN is smartbin.local/localhost/mqtt — the compose
+      # hostname "mqtt" is included, so hostname verification passes.
+      MQTT_TLS_INSECURE: "false"
+      MQTT_TOPIC: smartbin/+/telemetry
+      MQTT_CLIENT_ID: smartbin-api
+      MQTT_QOS: 1
+      MQTT_RECONNECT_MIN: 1
+      MQTT_RECONNECT_MAX: 60
+    env_file:
+      # MQTT_USERNAME / MQTT_PASSWORD written by scripts/bootstrap.sh
+      - .env.secrets
+    volumes:
+      - ./mosquitto/certs/ca.crt:/app/certs/ca.crt:ro
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
 
 volumes:
   smartbin_data:
+  smartbin_mqtt_data:
+  smartbin_mqtt_log:

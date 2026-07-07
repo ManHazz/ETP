@@ -29,14 +29,14 @@ INTERVAL_SECONDS = 10  # time between readings (set low for testing, use 900 for
 # ── Campus bin locations (UTP approximate coords) ─────
 
 CAMPUS_BINS = [
-    {"label": "Cafeteria Block A",       "latitude": 4.3856, "longitude": 103.9634, "capacity_liters": 120},
-    {"label": "Library Entrance",        "latitude": 4.3849, "longitude": 103.9641, "capacity_liters": 80},
-    {"label": "Hostel V5 Lobby",         "latitude": 4.3873, "longitude": 103.9618, "capacity_liters": 120},
-    {"label": "Engineering Block 17",    "latitude": 4.3862, "longitude": 103.9657, "capacity_liters": 100},
-    {"label": "Chancellor Hall",         "latitude": 4.3841, "longitude": 103.9628, "capacity_liters": 150},
-    {"label": "Pocket D Convenience",    "latitude": 4.3869, "longitude": 103.9645, "capacity_liters": 80},
-    {"label": "Sport Complex",           "latitude": 4.3832, "longitude": 103.9612, "capacity_liters": 120},
-    {"label": "New Village Food Court",  "latitude": 4.3878, "longitude": 103.9652, "capacity_liters": 150},
+    {"device_id": "BIN001", "label": "Cafeteria Block A",       "latitude": 4.3856, "longitude": 103.9634, "capacity_liters": 120},
+    {"device_id": "BIN002", "label": "Library Entrance",        "latitude": 4.3849, "longitude": 103.9641, "capacity_liters": 80},
+    {"device_id": "BIN003", "label": "Hostel V5 Lobby",         "latitude": 4.3873, "longitude": 103.9618, "capacity_liters": 120},
+    {"device_id": "BIN004", "label": "Engineering Block 17",    "latitude": 4.3862, "longitude": 103.9657, "capacity_liters": 100},
+    {"device_id": "BIN005", "label": "Chancellor Hall",         "latitude": 4.3841, "longitude": 103.9628, "capacity_liters": 150},
+    {"device_id": "BIN006", "label": "Pocket D Convenience",    "latitude": 4.3869, "longitude": 103.9645, "capacity_liters": 80},
+    {"device_id": "BIN007", "label": "Sport Complex",           "latitude": 4.3832, "longitude": 103.9612, "capacity_liters": 120},
+    {"device_id": "BIN008", "label": "New Village Food Court",  "latitude": 4.3878, "longitude": 103.9652, "capacity_liters": 150},
 ]
 
 

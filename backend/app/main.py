@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import engine, Base
+from app.mqtt_client import build_client, start, stop
 from app.routes import router
 
 
@@ -9,7 +10,15 @@ async def lifespan(app: FastAPI):
     # Create all tables on startup
     Base.metadata.create_all(bind=engine)
     print("✓ Database tables ready")
-    yield
+
+    mqtt_client = build_client()
+    start(mqtt_client)
+    print("✓ MQTT subscriber started")
+    try:
+        yield
+    finally:
+        stop(mqtt_client)
+        print("✓ MQTT subscriber stopped")
 
 
 app = FastAPI(

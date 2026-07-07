@@ -1,0 +1,12 @@
+# ── API service ────────────────────────────────────────────────
+# Subscribes to every device's telemetry, owns the status topic.
+user api
+topic read smartbin/+/telemetry
+topic readwrite smartbin/api/status
+
+# ── ESP32 devices ──────────────────────────────────────────────
+# Devices connect with username == device_id (e.g. "BIN001").
+# %u expands to the connected username, so each device can only
+# publish to its OWN telemetry topic. It cannot subscribe to
+# anything, cannot spoof another device, cannot touch api status.
+pattern write smartbin/%u/telemetry

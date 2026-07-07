@@ -10,6 +10,7 @@ class Bin(Base):
     __tablename__ = "bins"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    device_id: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True, index=True)
     label: Mapped[str] = mapped_column(String(100))  # e.g. "Cafeteria Block A"
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)

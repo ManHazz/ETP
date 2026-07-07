@@ -10,6 +10,7 @@ class BinCreate(BaseModel):
     longitude: float = Field(examples=[101.0901])
     capacity_liters: float = Field(default=120.0)
     description: str | None = None
+    device_id: str | None = Field(default=None, examples=["BIN001"])
 
 
 class BinResponse(BinCreate):
@@ -44,6 +45,17 @@ class SensorPayload(BaseModel):
     gas_ppm: float = Field(ge=0)
     battery_voltage: float = Field(default=3.3, ge=0, le=5.0)
     timestamp: datetime | None = None  # server fills if missing
+
+
+class MqttSensorPayload(BaseModel):
+    """Raw ESP32 payload received over MQTT."""
+    bin_id: str = Field(examples=["BIN001"])
+    distance_cm: float = Field(ge=0)
+    fill_percentage: float = Field(ge=0, le=100)
+    bin_status: str | None = None
+    gas_adc: float = Field(ge=0)
+    air_quality: str | None = None
+    weight_kg: float = Field(ge=0)
 
 
 class ReadingResponse(BaseModel):

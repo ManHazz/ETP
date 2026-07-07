@@ -157,3 +157,70 @@ def log_collection(payload: CollectionCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(log)
     return log
+
+
+# ══════════════════════════════════════════════════════
+#  PREDICTIONS — when will each bin need collection?
+# ══════════════════════════════════════════════════════
+
+@router.get("/predictions")
+def get_predictions(
+    threshold: float = Query(default=80.0, ge=0, le=100),
+    lookback_hours: float = Query(default=24.0, ge=1),
+    db: Session = Depends(get_db),
+):
+    """
+    Predict when each bin will reach the fill threshold.
+    Returns bins sorted by urgency (soonest first).
+    """
+    from app.predictor import predict_all_bins
+    return predict_all_bins(db, threshold, lookback_hours)
+
+
+# ══════════════════════════════════════════════════════
+#  ROUTE — optimized collection route
+# ══════════════════════════════════════════════════════
+
+@router.get("/route")
+def get_optimized_route(
+    threshold: float = Query(default=80.0, ge=0, le=100),
+    hours_ahead: float = Query(default=8.0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate an optimized collection route based on predictions.
+
+    Collects bins that:
+      - Are already above the threshold, OR
+      - Are predicted to exceed the threshold within `hours_ahead`
+    """
+    from app.predictor import predict_all_bins
+    from app.optimizer import optimize_route
+
+    predictions = predict_all_bins(db, threshold)
+
+    # Filter: bins that need collection now or within the lookahead window
+    bins_to_collect = []
+    for pred in predictions:
+        eff = pred["current_effective_fill"]
+        hours = pred["hours_until_full"]
+
+        needs_now = eff is not None and eff >= threshold
+        needs_soon = hours is not None and hours <= hours_ahead
+
+        if needs_now or needs_soon:
+            # We need lat/lng — fetch the bin
+            bin = db.get(Bin, pred["bin_id"])
+            bins_to_collect.append({
+                "bin_id": pred["bin_id"],
+                "label": pred["label"],
+                "latitude": bin.latitude,
+                "longitude": bin.longitude,
+                "effective_fill": pred["current_effective_fill"],
+                "hours_until_full": pred["hours_until_full"],
+            })
+
+    route_result = optimize_route(bins_to_collect)
+    route_result["predictions"] = predictions
+
+    return route_result

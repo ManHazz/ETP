@@ -1,35 +1,16 @@
-# SmartBin Dashboard
+# React + Vite
 
-Real-time monitoring dashboard for the SmartBin waste management system.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Setup
+Currently, two official plugins are available:
 
-```bash
-cd smartbin-dashboard
-npm install
-npm run dev
-```
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Opens at `http://localhost:3000`. The Vite dev server proxies `/api` requests to `http://localhost:8000` (the FastAPI backend).
+## React Compiler
 
-Make sure the backend is running (`docker-compose up -d` in the `smartbin/` dir) and the simulator is feeding data.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Stack
+## Expanding the ESLint configuration
 
-- Vite + React 18
-- No external UI library — pure CSS with design tokens
-- Responsive grid (works on mobile)
-- Polls `/api/status` every 5 seconds
-
-## PWA conversion
-
-The HTML already has the PWA meta tags. To complete PWA setup:
-
-1. `npm install vite-plugin-pwa -D`
-2. Add to `vite.config.js`:
-   ```js
-   import { VitePWA } from 'vite-plugin-pwa'
-   // in plugins array:
-   VitePWA({ registerType: 'autoUpdate' })
-   ```
-3. Add icons to `/public` and a `manifest.json`
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

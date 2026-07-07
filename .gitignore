@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Env & secrets — NEVER commit
+.env
+.env.secrets
+.env.local
+backend/.env
+backend/.env.secrets
+
+# MQTT broker secrets
+backend/mosquitto/passwd
+backend/mosquitto/certs/*.key
+backend/mosquitto/certs/*.crt
+backend/mosquitto/certs/*.srl
+backend/mosquitto/data/
+backend/mosquitto/log/
+
+# Build artefacts
+*.log
