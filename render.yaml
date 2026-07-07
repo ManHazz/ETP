@@ -1,0 +1,55 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy: push this file to the repo, then in Render click
+#   New → Blueprint → connect repo → apply.
+# Render will build ./backend/Dockerfile and start the API as a Web Service.
+#
+# Free tier caveats (read before choosing this):
+#   - The web service spins down after ~15 min with no HTTP traffic.
+#     While asleep, the MQTT subscriber is disconnected. Devices publishing
+#     with QoS 1 get queued at HiveMQ and drained when the service wakes up.
+#   - Set up UptimeRobot (free) to GET /health every 5 min to keep it warm.
+#   - 750 free instance-hours per month across all free services on the account.
+
+services:
+  - type: web
+    name: smartbin-api
+    runtime: docker
+    plan: free
+    region: singapore          # closest to Malaysia; adjust if you deploy elsewhere
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    autoDeploy: true           # deploy on every push to `branch`
+
+    envVars:
+      # ── Database (Neon) — paste the full connection string with ?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+
+      # ── MQTT broker (HiveMQ Cloud Serverless) ──────────────────
+      - key: MQTT_BROKER          # e.g. abc123.s1.eu.hivemq.cloud
+        sync: false
+      - key: MQTT_PORT
+        value: "8883"
+      - key: MQTT_USERNAME        # the "api" account you create in HiveMQ
+        sync: false
+      - key: MQTT_PASSWORD
+        sync: false
+      - key: MQTT_TOPIC
+        value: smartbin/+/telemetry
+      - key: MQTT_CLIENT_ID
+        value: smartbin-api-render
+      - key: MQTT_QOS
+        value: "1"
+      - key: MQTT_TLS
+        value: "true"
+      # HiveMQ Cloud uses a public Let's Encrypt cert — the container's
+      # default CA bundle already trusts it, so leave MQTT_CA_CERT unset.
+      - key: MQTT_TLS_INSECURE
+        value: "false"
+      - key: MQTT_RECONNECT_MIN
+        value: "1"
+      - key: MQTT_RECONNECT_MAX
+        value: "60"

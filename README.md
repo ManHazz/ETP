@@ -229,13 +229,129 @@ By default GHCR packages are private. In GitHub → Packages → your image →
 Package settings, set visibility to Public if you want ESP32s (or you) to pull
 without a token, or generate a PAT with `read:packages` for the puller.
 
-### Public deployment (VPS + auto-HTTPS)
+## Public deployment — Vercel + Render + Neon + HiveMQ (all free tiers)
 
-For real ESP32s to reach the site, you need a public IP, a domain, and one
-Linux host with Docker. The `backend/docker-compose.prod.yml` overlay puts
-[Caddy](https://caddyserver.com) at the edge — it obtains and renews a
-Let's Encrypt cert automatically, serves the React SPA, and reverse-proxies
-`/api/*` to FastAPI.
+This is the recommended path: zero-server, git-driven, and free.
+
+```
+             ┌────────────┐        ┌──────────────┐        ┌──────────┐
+Browser ───▶ │  Vercel    │──/api──▶│  Render      │──────▶│  Neon    │
+             │ (React SPA)│ rewrite│ (FastAPI :10000)│      │ Postgres │
+             └────────────┘        └───────┬──────┘        └──────────┘
+                                           │ MQTT/TLS 8883
+                                           ▼
+                                    ┌──────────────┐
+ESP32s ────────── MQTT/TLS ─────────▶│  HiveMQ Cloud│
+                                    │  Serverless  │
+                                    └──────────────┘
+```
+
+Nothing you own runs 24/7. Vercel serves the SPA and rewrites `/api/*` to
+Render so the frontend stays same-origin (no CORS). Render runs the API +
+MQTT subscriber. Neon holds Postgres. HiveMQ is the always-on broker every
+ESP32 connects to.
+
+### One-time setup (about 20 minutes)
+
+**1. Create a Neon Postgres project** at [neon.tech](https://neon.tech) →
+new project → copy the connection string (looks like
+`postgresql://user:pass@ep-xxxx.aws.neon.tech/neondb?sslmode=require`).
+
+**2. Create a HiveMQ Cloud Serverless cluster** at
+[hivemq.com/cloud](https://www.hivemq.com/cloud/) (free tier). Note the
+broker host (e.g. `abc123.s1.eu.hivemq.cloud`) and port `8883`. In the
+cluster's Access Management page:
+
+- Create the `api` user (a random password) → this is what Render uses to subscribe.
+- For each ESP32, create a user named `BIN001`, `BIN002`, … each with a random password.
+- Add a permission for the api user: **subscribe** to `smartbin/+/telemetry`.
+- Add a permission template for devices: **publish** to `smartbin/{{clientId}}/telemetry` — or hardcode one per device. Same effect as the ACL we run locally.
+
+**3. Deploy the backend on Render** — push the repo to GitHub, then in
+Render click **New → Blueprint → connect repo**. Render finds
+`render.yaml`, prompts for the four "sync: false" secrets:
+
+| Variable | Where to get it |
+|---|---|
+| `DATABASE_URL`   | Neon connection string with `?sslmode=require` |
+| `MQTT_BROKER`    | HiveMQ cluster hostname (no `mqtts://`, no port) |
+| `MQTT_USERNAME`  | `api` |
+| `MQTT_PASSWORD`  | password for the `api` user in HiveMQ |
+
+Click Apply. Render builds `backend/Dockerfile` and starts the API. First
+build takes a few minutes; subsequent deploys are auto-triggered on push.
+
+**4. Seed the campus bins in the DB.** From your laptop, with the same
+`DATABASE_URL`:
+
+```bash
+export DATABASE_URL='<neon connection string>'
+cd backend
+python -m simulator.sim --seed
+```
+
+**5. Deploy the frontend on Vercel** — click **Add New → Project → import
+the repo → set Root Directory to `frontend`**. Vercel picks up
+`vercel.json` automatically.
+
+Before the first deploy, open `frontend/vercel.json` and replace
+`smartbin-api.onrender.com` with the URL Render gave you. Commit + push, and
+Vercel rebuilds.
+
+**6. Keep Render awake.** Register the Render URL at
+[uptimerobot.com](https://uptimerobot.com) (free) as an HTTP monitor on
+`/health` with a 5-minute interval. This prevents the free-tier spin-down so
+the MQTT subscriber stays connected.
+
+**7. Flash each ESP32** with:
+
+- Broker: `<hivemq-host>`, port `8883`, TLS on
+- Username = its device ID (`BIN001`, `BIN002`, …), password from step 2
+- Publish topic: `smartbin/<DEVICE_ID>/telemetry`
+- No custom CA needed — HiveMQ uses a public Let's Encrypt cert, the
+  ESP32's default root store trusts it. (On Arduino, `WiFiClientSecure` +
+  `setCACert(letsencrypt_r3_pem)` or `setInsecure()` for a first test.)
+
+Site is now live at your Vercel URL. ESP32s publish → HiveMQ → Render →
+Neon → dashboard.
+
+### Free-tier limits to be aware of
+
+| Service | Free ceiling | What happens at the ceiling |
+|---|---|---|
+| Vercel        | 100 GB bandwidth / month | Slower or paid upgrade |
+| Render        | 750 instance-hours / month, spins down after 15 min idle | UptimeRobot keeps it warm |
+| Neon          | 3 GB storage, 191 compute-hours / month | Neon auto-suspends compute; wakes on query |
+| HiveMQ Cloud  | 100 concurrent connections, 10 GB traffic / month | Refuses new device connections above 100 |
+| UptimeRobot   | 50 monitors, 5-min interval | Fine forever for this |
+
+### Security posture on this stack
+
+| Concern | Control |
+|---|---|
+| Transport encryption | TLS 1.2 everywhere (Vercel → Render, HiveMQ → clients). No plaintext hops. |
+| Device authentication | HiveMQ per-user password (same model as our local `mosquitto_passwd`). |
+| Device authorization  | HiveMQ topic ACL: each device can only publish to `smartbin/<its-id>/telemetry`. |
+| API authentication    | The API doesn't accept unsigned writes from the internet — the only ingest path is MQTT via HiveMQ, and HiveMQ authenticates every publisher. |
+| Frontend headers      | Vercel injects HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, Referrer-Policy, Permissions-Policy. |
+| Secrets in git        | `.env.secrets`, `mosquitto/passwd`, `*.key` gitignored. Cloud secrets live in Render/Vercel dashboards, never in the repo. |
+| Reduced attack surface | No SSH, no host firewall, no cert renewal — the three providers own that. |
+
+### Later releases
+
+Push to `main` → Render + Vercel auto-deploy on their own webhooks. No SSH,
+no GitHub deploy action needed for this path. The `.github/workflows/deploy.yml`
+workflow only applies to the alternative VPS path below.
+
+---
+
+## Alternative: self-hosted VPS + auto-HTTPS
+
+For anyone who wants full control (a real Raspberry Pi in the corner of the
+lab, or a €4/mo Hetzner box), the repo also ships a self-hosted stack:
+`backend/docker-compose.prod.yml` puts [Caddy](https://caddyserver.com) at
+the edge with Let's Encrypt, serves the React SPA, reverse-proxies `/api/*`
+to FastAPI, and runs a local Mosquitto broker with our per-device ACL.
 
 **Architecture in production**
 
@@ -372,12 +488,14 @@ project/
 │   └── README.md               (backend-specific notes)
 ├── frontend/
 │   ├── src/                     React app
-│   ├── Dockerfile               node build + Caddy image
+│   ├── Dockerfile               node build + Caddy image (self-hosted path)
+│   ├── vercel.json              Vercel deploy config (cloud path)
 │   ├── package.json
 │   └── vite.config.js
 ├── .github/workflows/
 │   ├── ci.yml                   backend + frontend build, publishes images
-│   └── deploy.yml               manual/auto deploy to the VPS
+│   └── deploy.yml               manual/auto deploy to the VPS (alt path)
+├── render.yaml                  Render Blueprint (cloud path)
 ├── .gitignore
 └── README.md                    (this file)
 ```
