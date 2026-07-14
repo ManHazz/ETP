@@ -131,8 +131,14 @@ def build_client() -> mqtt.Client:
     if MQTT_USERNAME:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     if MQTT_TLS:
+        # If the configured CA path doesn't exist (e.g. running on Render
+        # against a public broker like HiveMQ), fall back to the system
+        # trust store by passing ca_certs=None.
+        ca_path = MQTT_CA_CERT if MQTT_CA_CERT and os.path.exists(MQTT_CA_CERT) else None
+        if MQTT_CA_CERT and ca_path is None:
+            log.warning("MQTT_CA_CERT %s not found — falling back to system CA", MQTT_CA_CERT)
         client.tls_set(
-            ca_certs=MQTT_CA_CERT,
+            ca_certs=ca_path,
             certfile=MQTT_CLIENT_CERT,
             keyfile=MQTT_CLIENT_KEY,
             tls_version=ssl.PROTOCOL_TLSv1_2,
