@@ -65,11 +65,22 @@ services:
       MQTT_QOS: 1
       MQTT_RECONNECT_MIN: 1
       MQTT_RECONNECT_MAX: 60
+      # Auth — CHANGE THESE IN PROD (put in .env.secrets instead)
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-smartbin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-smartbin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_ALLOWED_DOMAINS: ${GOOGLE_ALLOWED_DOMAINS:-}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      PHOTO_STORAGE_DIR: /app/photos
+      ANOMALY_SCAN_SECONDS: 300
     env_file:
       # MQTT_USERNAME / MQTT_PASSWORD written by scripts/bootstrap.sh
       - .env.secrets
     volumes:
       - ./mosquitto/certs/ca.crt:/app/certs/ca.crt:ro
+      - smartbin_photos:/app/photos
     depends_on:
       db:
         condition: service_healthy
@@ -80,3 +91,4 @@ volumes:
   smartbin_data:
   smartbin_mqtt_data:
   smartbin_mqtt_log:
+  smartbin_photos:

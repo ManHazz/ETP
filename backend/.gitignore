@@ -12,7 +12,7 @@ mosquitto/log/
 # Python
 __pycache__/
 *.pyc
-.venv/
+venv/
 
 # Claude
 .claude/

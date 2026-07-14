@@ -30,5 +30,8 @@ backend/mosquitto/certs/*.srl
 backend/mosquitto/data/
 backend/mosquitto/log/
 
+# Firmware per-device config — contains Wi-Fi password + device MQTT password
+firmware/SmartBinNode/config.h
+
 # Build artefacts
 *.log

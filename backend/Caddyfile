@@ -25,6 +25,12 @@
     handle /openapi.json   { reverse_proxy api:8000 }
     handle /health         { reverse_proxy api:8000 }
 
+    # Collection-proof photos (served by FastAPI's StaticFiles mount at /photos)
+    handle /photos/*       { reverse_proxy api:8000 }
+
+    # Web fonts (Google Fonts CSS + files)
+    # Allowed via CSP below but no rewrite needed since we hit them client-side.
+
     # ── React SPA ────────────────────────────────────────────────
     # Everything else serves the built dashboard. try_files gives SPA
     # deep-links (e.g. /route) a working refresh.
@@ -41,9 +47,9 @@
         X-Frame-Options           DENY
         Referrer-Policy           strict-origin-when-cross-origin
         Permissions-Policy        "geolocation=(), microphone=(), camera=()"
-        # Loose CSP: allow self + inline styles/imgs Leaflet needs, plus
-        # the CARTO tile CDN. Tighten if you replace the map layer.
-        Content-Security-Policy   "default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; script-src 'self'"
+        # CSP tuned for: OSM/CARTO tiles, Open-Meteo, Google Fonts, Google Sign-In (GIS),
+        # inline styles Leaflet needs. Tighten if you swap tile provider or fonts.
+        Content-Security-Policy   "default-src 'self'; img-src 'self' data: blob: https: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://*.googleusercontent.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.open-meteo.com https://accounts.google.com; script-src 'self' https://accounts.google.com/gsi/client; frame-src https://accounts.google.com; manifest-src 'self'; worker-src 'self'"
         -Server
     }
 

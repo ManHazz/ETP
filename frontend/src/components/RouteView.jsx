@@ -1,92 +1,162 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { MapContainer, TileLayer, Polyline, Popup, Marker } from 'react-leaflet'
 import L from 'leaflet'
-import { getStatus } from '../utils'
+import { useTheme } from '../hooks/useTheme'
+import Icon from './Icon'
+import DispatchPanel from './DispatchPanel'
+import { api } from '../api'
 import 'leaflet/dist/leaflet.css'
 
-const depotIcon = L.divIcon({ className: '', html: '<div style="width:28px;height:28px;background:#7aa2f7;border:3px solid #1a1b2e;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#1a1b2e;font-weight:700">D</div>', iconSize: [28, 28], iconAnchor: [14, 14] })
-const stopIcon = (n) => L.divIcon({ className: '', html: `<div style="width:26px;height:26px;background:#f7768e;border:3px solid #1a1b2e;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;color:#1a1b2e;font-weight:700;font-family:monospace">${n}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] })
-const colorMap = { 'var(--green)': '#9ece6a', 'var(--amber)': '#e0af68', 'var(--red)': '#f7768e', 'var(--text-muted)': '#565f89' }
-const btn = { fontFamily: 'var(--font-ui)', fontSize: '.82rem', fontWeight: 600, padding: '6px 16px', borderRadius: 99, border: 'none', background: 'var(--blue)', color: 'var(--bg-base)', cursor: 'pointer' }
-const inp = { fontFamily: 'var(--font-mono)', fontSize: '.82rem', width: 60, padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-primary)', outline: 'none' }
+const TILES = {
+  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+}
+
+const depotIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:32px;height:32px;background:#2563EB;border:3px solid white;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;color:white;font-weight:800;box-shadow:0 4px 12px rgba(37,99,235,.4)">D</div>',
+  iconSize: [32, 32], iconAnchor: [16, 16],
+})
+const stopIcon = (n) => L.divIcon({
+  className: '',
+  html: `<div style="width:30px;height:30px;background:#C026D3;border:3px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;color:white;font-weight:800;font-family:monospace;box-shadow:0 4px 12px rgba(192,38,211,.4)">${n}</div>`,
+  iconSize: [30, 30], iconAnchor: [15, 15],
+})
 
 export default function RouteView() {
-  const [data, setData] = useState(null), [loading, setLoading] = useState(false)
-  const [threshold, setThreshold] = useState(80), [hours, setHours] = useState(8)
-  const go = () => { setLoading(true); fetch(`/api/route?threshold=${threshold}&hours_ahead=${hours}`).then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false)) }
-  useEffect(() => { go() }, [])
-  const route = data?.route || [], preds = data?.predictions || []
-  const coords = route.map(s => [s.latitude, s.longitude])
+  const { theme } = useTheme()
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [threshold, setThreshold] = useState(80)
+  const [minBins, setMinBins] = useState(3)
+  const [respectPolicy, setRespectPolicy] = useState(true)
+
+  const build = async () => {
+    setLoading(true)
+    try {
+      const d = await api.get(`/route?threshold=${threshold}&min_bins=${minBins}&respect_policy=${respectPolicy}`)
+      setData(d)
+    } catch (err) {
+      setData({ status: 'error', error: err.message, route: [], predictions: [] })
+    } finally { setLoading(false) }
+  }
+  useEffect(() => { build() }, [])
+
+  const route = data?.route || []
+  const preds = data?.predictions || []
+  const coords = route.map((s) => [s.latitude, s.longitude])
   const center = route.length ? [route[0].latitude, route[0].longitude] : [4.3856, 103.9634]
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-      {/* Controls */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.82rem', color: 'var(--text-secondary)' }}>
-          <span>Threshold</span><input type="number" value={threshold} onChange={e => setThreshold(+e.target.value)} style={inp} min={0} max={100} /><span>%</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
+      <DispatchPanel onGenerateRoute={build} />
+
+      <div className="card" style={{ padding: 'var(--sp-4)', display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-4)', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label className="label">Hard threshold %</label>
+          <input className="input" type="number" value={threshold} onChange={(e) => setThreshold(+e.target.value)} min={0} max={100} style={{ width: 100 }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.82rem', color: 'var(--text-secondary)' }}>
-          <span>Look ahead</span><input type="number" value={hours} onChange={e => setHours(+e.target.value)} style={inp} min={0} max={72} /><span>hours</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label className="label">Min bins to dispatch</label>
+          <input className="input" type="number" value={minBins} onChange={(e) => setMinBins(+e.target.value)} min={1} max={50} style={{ width: 100 }} />
         </div>
-        <button onClick={go} style={btn} disabled={loading}>{loading ? 'Computing…' : 'Generate route'}</button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.85rem' }}>
+          <input type="checkbox" checked={respectPolicy} onChange={(e) => setRespectPolicy(e.target.checked)} />
+          Respect batching policy
+        </label>
+        <button className="btn btn-primary" onClick={build} disabled={loading} style={{ marginLeft: 'auto' }}>
+          <Icon name="route" size={16} /> {loading ? 'Computing…' : 'Rebuild route'}
+        </button>
       </div>
-      {/* Stats */}
-      {data?.status === 'optimal' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 'var(--space-sm)' }}>
-          {[{ v: data.total_stops, l: 'Stops' }, { v: data.total_distance_km, l: 'km total' }, { v: data.estimated_time_minutes, l: 'est. min' }].map(s => (
-            <div key={s.l} style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-md)' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 600, color: 'var(--blue)' }}>{s.v}</div>
-              <div style={{ fontSize: '.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.03em' }}>{s.l}</div>
-            </div>
-          ))}
+
+      {data?.status === 'deferred' && (
+        <div className="card" style={{ padding: 'var(--sp-6)', textAlign: 'center', borderLeft: '3px solid var(--warning)' }}>
+          <Icon name="clock" size={22} style={{ color: 'var(--warning)' }} />
+          <div style={{ fontWeight: 700, fontSize: '1rem', margin: '8px 0' }}>Dispatch deferred by policy</div>
+          <div style={{ color: 'var(--text-secondary)' }}>{data.decision?.reason}</div>
         </div>
       )}
-      {/* Map */}
-      {route.length > 0 ? (
-        <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', height: 'clamp(300px,50vh,500px)', width: '100%' }}>
+
+      {data?.status === 'optimal' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--sp-3)' }}>
+          <Stat label="Stops" value={data.total_stops} />
+          <Stat label="Total km" value={data.total_distance_km} />
+          <Stat label="Est. min" value={data.estimated_time_minutes} />
+        </div>
+      )}
+
+      {route.length > 0 && (
+        <div style={{ borderRadius: 'var(--r-lg)', overflow: 'hidden', height: 'clamp(320px, 55vh, 560px)', border: '1px solid var(--border)' }}>
           <MapContainer center={center} zoom={16} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
-            <TileLayer attribution="&copy; CARTO" url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-            <Polyline positions={coords} pathOptions={{ color: '#7aa2f7', weight: 3, opacity: .7, dashArray: '8,8' }} />
+            <TileLayer attribution="&copy; CARTO / OSM" url={TILES[theme]} />
+            <Polyline positions={coords} pathOptions={{ color: '#C026D3', weight: 3, opacity: .8, dashArray: '8, 8' }} />
             {route.map((s, i) => s.type === 'depot' || s.type === 'return'
               ? <Marker key={`d${i}`} position={[s.latitude, s.longitude]} icon={depotIcon}><Popup><strong>{s.label}</strong><br />{s.type === 'return' ? 'Return' : 'Start'}</Popup></Marker>
-              : <Marker key={`s${i}`} position={[s.latitude, s.longitude]} icon={stopIcon(s.order)}><Popup><strong>#{s.order} — {s.label}</strong><br />Effective: {s.effective_fill?.toFixed(0) ?? '—'}%</Popup></Marker>
+              : <Marker key={`s${i}`} position={[s.latitude, s.longitude]} icon={stopIcon(s.order)}><Popup><strong>#{s.order} — {s.label}</strong><br />Effective: {s.effective_fill?.toFixed(0) ?? '—'}%<br />Reason: {s.reason || '—'}</Popup></Marker>
             )}
           </MapContainer>
         </div>
-      ) : data?.status === 'no_bins' ? (
-        <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--text-muted)' }}>No bins need collection. Adjust threshold or look-ahead.</div>
-      ) : null}
-      {/* Stop list */}
-      {route.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {route.map((s, i) => (
-            <div key={i}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', padding: 'var(--space-sm) var(--space-md)', background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)', fontSize: '.85rem' }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '.82rem', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: s.type === 'pickup' ? 'var(--red)' : 'var(--blue)', color: 'var(--bg-base)' }}>{s.type === 'pickup' ? s.order : 'D'}</div>
-                <span style={{ flex: 1, fontWeight: 500 }}>{s.label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '.78rem', color: s.type === 'pickup' ? ((s.effective_fill ?? 0) >= 80 ? 'var(--red)' : 'var(--amber)') : 'var(--blue)' }}>
-                  {s.type === 'pickup' ? `${s.effective_fill?.toFixed(0) ?? '—'}%` : s.type === 'depot' ? 'START' : 'END'}
-                </span>
-              </div>
-              {i < route.length - 1 && <div style={{ width: 24, display: 'flex', justifyContent: 'center' }}><div style={{ width: 2, height: 12, background: 'var(--border)' }} /></div>}
-            </div>
-          ))}
-        </div>
       )}
-      {/* Predictions */}
-      {preds.length > 0 && (
-        <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', padding: 'var(--space-lg)' }}>
-          <div style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)', textTransform: 'uppercase', letterSpacing: '.03em' }}>All bin predictions</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,260px),1fr))', gap: 'var(--space-sm)' }}>
-            {preds.map(p => { const s = getStatus(p.current_effective_fill); return (
-              <div key={p.bin_id} style={{ padding: 'var(--space-sm) var(--space-md)', background: 'var(--bg-base)', borderRadius: 'var(--radius-sm)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.82rem' }}>
-                <span style={{ fontWeight: 500 }}>{p.label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '.78rem', color: colorMap[s.color] || '#565f89' }}>{p.hours_until_full != null ? (p.hours_until_full <= 0 ? 'NOW' : `${p.hours_until_full}h`) : '—'}</span>
+
+      {route.length > 0 && (
+        <div className="card" style={{ padding: 'var(--sp-4)' }}>
+          <div className="label" style={{ marginBottom: 12 }}>Stop order</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {route.map((s, i) => (
+              <div key={i}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: 'var(--sp-3)', borderRadius: 'var(--r-md)', background: 'var(--bg-sunken)' }}>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '.78rem',
+                    width: 28, height: 28, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    background: s.type === 'pickup' ? 'var(--brand)' : 'var(--accent)',
+                    color: 'white',
+                  }}>{s.type === 'pickup' ? s.order : 'D'}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, fontSize: '.9rem' }}>{s.label}</span>
+                    {s.reason && <div style={{ fontSize: '.7rem', color: 'var(--text-muted)' }}>{s.reason}</div>}
+                  </div>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '.8rem',
+                    color: s.type === 'pickup' ? ((s.effective_fill ?? 0) >= 80 ? 'var(--danger)' : 'var(--warning)') : 'var(--accent)',
+                  }}>
+                    {s.type === 'pickup' ? `${s.effective_fill?.toFixed(0) ?? '—'}%` : s.type === 'depot' ? 'START' : 'END'}
+                  </span>
+                </div>
+                {i < route.length - 1 && <div style={{ width: 28, display: 'flex', justifyContent: 'center' }}><div style={{ width: 2, height: 12, background: 'var(--border)' }} /></div>}
               </div>
-            )})}
+            ))}
           </div>
         </div>
       )}
+
+      {preds.length > 0 && (
+        <div className="card" style={{ padding: 'var(--sp-4)' }}>
+          <div className="label" style={{ marginBottom: 12 }}>All bin predictions</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 8 }}>
+            {preds.map((p) => (
+              <div key={p.bin_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '.82rem' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.label}</div>
+                  <div style={{ fontSize: '.68rem', color: 'var(--text-muted)' }}>{p.confidence} conf. · {p.fill_rate_per_hour?.toFixed(1) ?? '—'}%/h</div>
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '.78rem', color: 'var(--brand)' }}>
+                  {p.hours_until_full != null ? (p.hours_until_full <= 0 ? 'NOW' : `${p.hours_until_full}h`) : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Stat({ label, value }) {
+  return (
+    <div className="stat stat-accent-brand">
+      <span className="stat-label">{label}</span>
+      <div className="stat-value">{value}</div>
     </div>
   )
 }

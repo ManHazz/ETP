@@ -6,3 +6,13 @@ pydantic==2.9.2
 python-dotenv==1.0.1
 ortools==9.10.4067
 paho-mqtt==2.1.0
+httpx==0.27.2
+passlib[bcrypt]==1.7.4
+# passlib 1.7.4's bcrypt backend runs a "wrap bug" self-test that hashes a
+# >72-byte password. bcrypt>=4.1 refuses to truncate and raises ValueError,
+# which crashes app startup. Pin below 4.1 until passlib ships a fix.
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.9
+google-auth==2.35.0
+email-validator==2.2.0

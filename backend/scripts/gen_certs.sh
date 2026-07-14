@@ -42,11 +42,12 @@ openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
   -out server.crt -days 825 -extfile server.ext >/dev/null 2>&1
 rm -f server.csr server.ext ca.srl
 
-chmod 600 server.key
-
-# Mosquitto in the container runs as uid 1883; make files world-readable
-# (they're already public certs) and lock down keys to owner/group only.
-chmod 644 ca.crt server.crt
+# Mosquitto in the container runs as uid 1883, not your host uid, so a
+# `chmod 600` server.key locks the container out and the TLS listener
+# fails with "Permission denied". 644 is acceptable for a dev cert on a
+# repo-local bind mount; in production, either chown the key to 1883
+# or use a named docker volume with the correct ownership.
+chmod 644 ca.crt server.crt server.key
 
 echo
 echo "✓ Certs written to $CERT_DIR"

@@ -4,9 +4,19 @@ user api
 topic read smartbin/+/telemetry
 topic readwrite smartbin/api/status
 
-# ── ESP32 devices ──────────────────────────────────────────────
-# Devices connect with username == device_id (e.g. "BIN001").
-# %u expands to the connected username, so each device can only
-# publish to its OWN telemetry topic. It cannot subscribe to
-# anything, cannot spoof another device, cannot touch api status.
+# ── ESP32 devices (shared credential) ─────────────────────────
+# All ESP32s connect as username "devices" using a shared password.
+# They may publish to any smartbin/<device_id>/telemetry topic; the
+# device_id is derived from the ESP32's MAC address on boot, and the
+# backend auto-registers new IDs as "pending" bins for admins to claim.
+# Trade-off: someone with the shared cred could spoof any device_id.
+# Acceptable for private/school deployments; use per-device creds
+# if you need stronger provenance.
+user devices
+topic write smartbin/+/telemetry
+
+# ── Legacy per-device credentials ─────────────────────────────
+# Still supported for pre-provisioned BIN001..BIN008 style devices.
+# %u expands to the connected username, so a device using its own
+# credential can still only publish to its own telemetry topic.
 pattern write smartbin/%u/telemetry

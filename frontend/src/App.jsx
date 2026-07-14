@@ -1,45 +1,116 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePolling } from './hooks/usePolling'
-import Header from './components/Header'
-import SummaryBar from './components/SummaryBar'
-import BinCard from './components/BinCard'
+import { useTheme } from './hooks/useTheme'
+import { useOnline } from './hooks/useOnline'
+import { useInstallPrompt } from './hooks/useInstallPrompt'
+import { useHashRoute } from './hooks/useHashRoute'
+import { useAuth } from './hooks/useAuth'
+
+import Sidebar from './components/Sidebar'
+import BottomNav from './components/BottomNav'
+import Topbar from './components/Topbar'
+import AlertToasts from './components/AlertToasts'
+import OfflineBanner from './components/OfflineBanner'
+import BinDetail from './components/BinDetail'
+
+import DashboardView from './views/DashboardView'
+import BinsView from './views/BinsView'
 import MapView from './components/MapView'
 import RouteView from './components/RouteView'
-import AlertToasts from './components/AlertToasts'
-
-const sorts = {
-  fill: (a, b) => (b.effective_fill ?? -1) - (a.effective_fill ?? -1),
-  name: (a, b) => a.label.localeCompare(b.label),
-  recent: (a, b) => new Date(b.last_reading_at || 0) - new Date(a.last_reading_at || 0),
-}
-
-function Btn({ active, children, ...p }) {
-  return <button {...p} style={{ fontFamily: 'var(--font-ui)', fontSize: '.8rem', fontWeight: 500, padding: '6px 14px', borderRadius: 99, border: '1px solid', cursor: 'pointer', transition: 'all .15s', background: active ? 'var(--bg-raised)' : 'transparent', color: active ? 'var(--text-primary)' : 'var(--text-secondary)', borderColor: active ? 'var(--blue)' : 'var(--border)' }}>{children}</button>
-}
+import AnalyticsView from './views/AnalyticsView'
+import CollectionsView from './views/CollectionsView'
+import AnomaliesView from './views/AnomaliesView'
+import AdminView from './views/AdminView'
+import SettingsView from './views/SettingsView'
+import LoginView from './views/LoginView'
 
 export default function App() {
-  const { data: bins, error, loading, lastUpdated } = usePolling('/status', 5000)
-  const [sort, setSort] = useState('fill')
-  const [view, setView] = useState('grid')
-  const sorted = bins ? [...bins].sort(sorts[sort]) : []
+  const { user, login, register, googleLogin, logout } = useAuth()
+  const { theme, toggle: toggleTheme } = useTheme()
+
+  if (!user) return <LoginView onLogin={login} onRegister={register} onGoogle={googleLogin} />
+  return <Shell user={user} onLogout={logout} theme={theme} toggleTheme={toggleTheme} />
+}
+
+function Shell({ user, onLogout, theme, toggleTheme }) {
+  const { data: bins, error, loading, lastUpdated, refetch } = usePolling('/status', 10000)
+  const online = useOnline()
+  const { canInstall, promptInstall } = useInstallPrompt()
+  const { route, navigate } = useHashRoute()
+
+  const [search, setSearch] = useState('')
+  const [detailBin, setDetailBin] = useState(null)
+
+  const openBin = (bin) => setDetailBin(bin)
+  const closeBin = () => setDetailBin(null)
+
+  useEffect(() => { if (route === 'route' || route === 'map') setSearch('') }, [route])
+
+  // Non-admins get bumped away from /admin
+  useEffect(() => {
+    if (route === 'admin' && user.role !== 'admin') navigate('dashboard')
+  }, [route, user.role, navigate])
+
+  const showSearch = route === 'bins' || route === 'dashboard'
+
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 'var(--space-lg)', display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)', minHeight: '100dvh' }}>
-      <AlertToasts bins={bins} />
-      <Header lastUpdated={lastUpdated} error={error} />
-      <SummaryBar bins={bins} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
-        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-          <Btn active={view === 'grid'} onClick={() => setView('grid')}>Grid</Btn>
-          <Btn active={view === 'map'} onClick={() => setView('map')}>Map</Btn>
-          <Btn active={view === 'route'} onClick={() => setView('route')}>Route</Btn>
+    <div className="shell">
+      <Sidebar route={route} onNavigate={navigate} user={user} onLogout={onLogout} />
+      <Topbar
+        showSearch={showSearch}
+        search={search} setSearch={setSearch}
+        lastUpdated={lastUpdated} error={error} online={online}
+        theme={theme} onToggleTheme={toggleTheme}
+        canInstall={canInstall} onInstall={promptInstall}
+        onRefresh={refetch}
+      />
+      <main className="shell-main">
+        <div className="container">
+          <OfflineBanner online={online} />
+          <AlertToasts bins={bins} />
+          {route === 'dashboard'   && <DashboardView bins={bins} loading={loading} onOpenBin={openBin} onNavigate={navigate} />}
+          {route === 'bins'        && <BinsView bins={bins} loading={loading} search={search} onOpenBin={openBin} />}
+          {route === 'map'         && <MapPage bins={bins} loading={loading} onOpen={openBin} />}
+          {route === 'route'       && <RoutePage />}
+          {route === 'analytics'   && <AnalyticsView bins={bins} loading={loading} />}
+          {route === 'collections' && <CollectionsView bins={bins} />}
+          {route === 'anomalies'   && <AnomaliesView bins={bins} />}
+          {route === 'admin' && user.role === 'admin' && <AdminView bins={bins} onRefresh={refetch} user={user} />}
+          {route === 'settings'    && <SettingsView theme={theme} onToggleTheme={toggleTheme} canInstall={canInstall} onInstall={promptInstall} onNavigate={navigate} user={user} onLogout={onLogout} />}
         </div>
-        {view === 'grid' && <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>{Object.keys(sorts).map(k => <Btn key={k} active={sort === k} onClick={() => setSort(k)}>{k === 'fill' ? 'By fill' : k === 'name' ? 'By name' : 'By recent'}</Btn>)}</div>}
+      </main>
+      <BottomNav route={route} onNavigate={navigate} />
+      {detailBin && (
+        <BinDetail
+          bin={bins?.find((b) => b.id === detailBin.id) || detailBin}
+          onClose={closeBin}
+          onRefresh={refetch}
+        />
+      )}
+    </div>
+  )
+}
+
+function MapPage({ bins, loading, onOpen }) {
+  return (
+    <div className="stack">
+      <div>
+        <div className="page-title">Map</div>
+        <div className="page-subtitle">All bins by location · tap a marker for details</div>
       </div>
-      {loading ? <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--text-muted)' }}>Loading bins…</div>
-        : sorted.length === 0 ? <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--text-muted)' }}>No bins registered yet.</div>
-        : view === 'map' ? <MapView bins={sorted} />
-        : view === 'route' ? <RouteView />
-        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,320px),1fr))', gap: 'var(--space-md)' }}>{sorted.map(b => <BinCard key={b.id} bin={b} />)}</div>}
+      {loading ? <div className="card skeleton" style={{ height: 400 }} /> : <MapView bins={bins || []} onOpen={onOpen} />}
+    </div>
+  )
+}
+
+function RoutePage() {
+  return (
+    <div className="stack">
+      <div>
+        <div className="page-title">Collection route</div>
+        <div className="page-subtitle">Optimized pickup order — gated by the dispatch policy</div>
+      </div>
+      <RouteView />
     </div>
   )
 }

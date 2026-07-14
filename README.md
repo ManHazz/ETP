@@ -1,9 +1,45 @@
 # SmartBin — AI-powered Predictive Waste Management
 
-Campus-scale IoT + ML system. ESP32 nodes on each bin publish sensor telemetry
-over MQTT, a FastAPI backend ingests and stores it in TimescaleDB, fuses the
-signals to predict overflow, and computes an OR-Tools optimized collection
-route. A React dashboard polls the backend for live state, history, and route.
+Campus-scale IoT system that turns dumb bins into a dispatch-aware fleet. ESP32
+nodes publish sensor telemetry over MQTT, a FastAPI backend fuses the signals,
+learns per-bin fill patterns, adjusts for weather + scheduled events, and — the
+critical part — decides whether a truck should actually roll based on a
+batching + hazard policy so you never dispatch for a single bin. A React PWA
+dashboard drives it all.
+
+**100% open-source, self-hostable stack** — no proprietary cloud services
+required. Runs on a single VPS via `docker compose`.
+
+| Layer     | Tech                                    | License      |
+|-----------|-----------------------------------------|--------------|
+| Web       | React 18 + Vite + Leaflet + service worker | MIT / BSD |
+| API       | FastAPI + SQLAlchemy + Pydantic         | MIT / Apache |
+| Predictor | Native Python (history + weather + events) | —         |
+| Optimizer | Google OR-Tools (VRP)                   | Apache-2.0   |
+| DB        | Postgres 16 + TimescaleDB               | PostgreSQL / Apache-2.0 |
+| MQTT      | Eclipse Mosquitto                       | EPL/EDL      |
+| Weather   | Open-Meteo (keyless, open-source)       | AGPL         |
+| Map tiles | CARTO Voyager / OSM (free tier — self-host for full independence) | ODbL |
+| Edge      | Caddy 2 with automatic Let's Encrypt   | Apache-2.0   |
+
+## What's new in v0.3
+
+- **Dispatch Decision Engine** — combines hard hazards (gas, overflow),
+  batching threshold, and opportunistic top-up so a single 82% bin no longer
+  triggers a truck run for one pickup.
+- **Multi-signal predictor** — blends learned per-bin day-of-week × hour-of-day
+  rates, category priors (cold-start), weather (Open-Meteo), and admin-defined
+  events (exam week, festival). Returns confidence bands, not point estimates.
+- **Anomaly engine** — background loop flags stuck sensors, sudden fill spikes,
+  tamper events, gas hazards, low battery, and dead nodes. Auto-resolves when
+  weight drops to zero (confirming a pickup happened).
+- **JWT auth** — admin / driver / viewer roles gate destructive endpoints.
+- **Collection proof** — collection logs support GPS + photo attachment; served
+  through Caddy from a docker volume.
+- **Fully open-source path** — same repo also has Vercel/Render/Neon/HiveMQ
+  free-tier files (see `render.yaml`, `frontend/vercel.json`) for a fast test
+  deploy, but the canonical production path is `docker compose -f
+  docker-compose.prod.yml up`.
 
 ```
 ┌──────────┐   MQTT/TLS   ┌──────────┐   HTTP    ┌──────────┐
@@ -49,9 +85,21 @@ Mounted under `/api` (see `backend/app/main.py`, `backend/app/routes.py`).
 | POST   | `/api/readings`       | Ingest a sensor payload over HTTP (used by simulator; ESP32s use MQTT) |
 | GET    | `/api/readings/{id}`  | Recent readings for a bin, `?limit=` |
 | GET    | `/api/status`         | Every bin with its latest reading + fused effective-fill score |
-| POST   | `/api/collections`    | Log a bin-emptying event |
-| GET    | `/api/predictions`    | Predicted time until each bin is full |
-| GET    | `/api/route`          | Optimized truck route for bins near/above threshold |
+| POST   | `/api/collections`    | Log a bin-emptying event (auth) |
+| GET    | `/api/collections`    | Collection history (`?bin_id=` and `?since_hours=` filters) |
+| POST   | `/api/collections/photo` | Upload proof-of-collection photo (auth, multipart) |
+| GET    | `/api/predictions`    | Weather + event + history adjusted fill predictions with confidence bands |
+| GET    | `/api/dispatch-decision` | The real answer: **should a truck roll right now?** With reasoning + cost/pickup |
+| GET    | `/api/route`          | Optimized truck route (gated by dispatch policy — `?respect_policy=false` to force) |
+| GET    | `/api/anomalies`      | Open anomalies (stuck sensor, spike, tamper, dead node, gas hazard, low battery) |
+| POST   | `/api/anomalies/scan` | Force a fresh scan (auth) |
+| POST   | `/api/anomalies/{id}/resolve` | Mark an anomaly resolved (auth) |
+| POST   | `/api/bin-events`     | Schedule a load event (fill-rate multiplier over a time window, auth: admin) |
+| GET    | `/api/bin-events`     | List scheduled events |
+| GET    | `/api/weather?lat=&lng=` | Open-Meteo snapshot + derived fill/gas multipliers |
+| POST   | `/api/auth/login`     | OAuth2 password grant → JWT |
+| GET    | `/api/auth/me`        | Current user profile |
+| POST   | `/api/users`          | Create user (auth: admin) — roles: `admin`/`driver`/`viewer` |
 
 Interactive Swagger UI at `/docs` when the API is running.
 
@@ -119,6 +167,97 @@ cd backend
 docker compose up -d
 python -m simulator.sim --seed
 ```
+
+## Self-hosted production deploy (all open source)
+
+```bash
+# 1) One-time on a fresh VPS with a public IP + DNS pointing at it
+cd backend
+./scripts/bootstrap.sh                       # certs + mqtt creds
+
+# 2) Set required env
+cat > .env <<EOF
+DOMAIN=smartbin.example.com
+POSTGRES_PASSWORD=$(openssl rand -hex 32)
+JWT_SECRET=$(openssl rand -hex 32)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=$(openssl rand -base64 24)    # write it down — you'll need it to sign in
+EOF
+
+# 3) Bring it up
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Now visit `https://smartbin.example.com` and sign in with the credentials from
+`.env`. Caddy handles TLS automatically (Let's Encrypt via ACME HTTP-01).
+
+**Nothing else is required.** No third-party account. No API keys. No credit
+card. Open-Meteo is called server-side and needs no auth; all other services
+run in the compose network.
+
+### Optional: enable Google Sign-In
+
+Google Sign-In is off by default. To turn it on:
+
+1. Create OAuth credentials at <https://console.cloud.google.com/apis/credentials>.
+   - Application type: **Web application**.
+   - Authorized JavaScript origins: `https://smartbin.example.com`.
+   - No redirect URI needed — SmartBin uses Google Identity Services (frontend
+     receives the ID token client-side and posts it to `/api/auth/google`).
+2. Add to `.env`:
+
+   ```env
+   GOOGLE_CLIENT_ID=1234567890-abc.apps.googleusercontent.com
+   # Optional: restrict to a Google Workspace domain (comma-separated).
+   GOOGLE_ALLOWED_DOMAINS=yourcompany.com
+   ```
+3. `docker compose -f docker-compose.prod.yml up -d`.
+4. Reload the login page — a **Continue with Google** button appears.
+
+Notes:
+- The backend verifies every ID token against Google's public keys — a stolen
+  or forged token cannot log in.
+- The first Google user is created as `viewer`. An admin can promote them
+  from Admin → Users.
+- If you'd rather stay 100% open-source, swap this integration for **Authentik**,
+  **Keycloak**, or **Zitadel** — all self-hostable and all support Google as
+  an upstream. The `/api/auth/google` endpoint's contract (ID token in →
+  session out) makes the swap straightforward.
+
+## Solving the "one bin, one truck" problem
+
+The dispatch decision engine (`backend/app/optimizer.py::decide_dispatch`) is
+the answer. Every ~5 s the dashboard hits `/api/dispatch-decision` which:
+
+1. Classifies each bin as **hazard**, **hard** (over threshold), **imminent**
+   (predicted full within grace window), or **soft** (candidate for top-up).
+2. Always dispatches on hazards (gas > 300 ppm, overflow).
+3. Requires `min_bins` (default 3) on the recommended route before rolling.
+4. **Opportunistically adds soft bins** within `topup_radius_km` of the hard
+   bins — the driver picks them up on the way.
+5. **Defers dispatch** if only 1–2 bins are ready but more are predicted to
+   fill within `grace_hours`, and tells the operator when to check back.
+
+Every threshold is a knob on the "Adjust dispatch policy" section of the
+dashboard, so operators can tune the tradeoff.
+
+## Predicting fill without knowing what's happening on-site
+
+The predictor (`backend/app/predictor.py::predict_bin_fill`) blends four
+signals, each with its own confidence:
+
+- **Historical rate** — average % / hour for this bin at the current
+  (day-of-week, hour-of-day) bucket, learned from the last 21 days.
+- **Recent trend** — linear regression over the last 12 hours.
+- **Category prior** — per-`cafeteria/office/hostel/park/…` baseline used as
+  cold-start for brand-new bins with no history.
+- **Weather** — Open-Meteo gives temperature + precipitation, converted into
+  fill and gas multipliers (rain reduces outdoor traffic; heat boosts gas).
+- **Events** — admin schedules "exam week", "concert", etc. from the dashboard
+  with a fill-rate multiplier applied during the time window.
+
+Predictions come back with `hours_until_full_low` / `_high` bounds so the UI
+can render uncertainty rather than false precision.
 
 Add a new real device later:
 

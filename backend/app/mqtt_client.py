@@ -82,18 +82,40 @@ def _on_message(client, userdata, msg):
     with SessionLocal() as db:
         bin = db.scalars(select(Bin).where(Bin.device_id == payload.bin_id)).first()
         if not bin:
-            log.warning("MQTT message from unknown device_id %s (topic %s)", payload.bin_id, msg.topic)
-            return
+            # Auto-register as a pending bin so admin can claim it in the UI.
+            # active=False keeps it out of the main list until claimed; pending=True
+            # surfaces it in the "Unclaimed devices" panel.
+            log.info("Auto-registering pending device %s", payload.bin_id)
+            bin = Bin(
+                device_id=payload.bin_id,
+                label=f"New device {payload.bin_id}",
+                latitude=0.0,
+                longitude=0.0,
+                capacity_liters=120.0,
+                category="other",
+                soft_threshold_pct=40.0,
+                active=False,
+                pending=True,
+            )
+            db.add(bin); db.commit(); db.refresh(bin)
 
         reading = SensorReading(
             bin_id=bin.id,
             fill_level_pct=payload.fill_percentage,
             weight_kg=payload.weight_kg,
             gas_ppm=payload.gas_adc,
+            battery_voltage=payload.battery_voltage if payload.battery_voltage is not None else 3.3,
             timestamp=datetime.now(timezone.utc),
         )
         db.add(reading)
         db.commit()
+        # Weight near-zero after prior readings = collection just happened.
+        # Close any open anomalies so operators don't stare at stale alerts.
+        try:
+            from app import anomaly as anomaly_engine
+            anomaly_engine.auto_close_on_empty(db, bin.id, payload.weight_kg)
+        except Exception as exc:
+            log.debug("auto_close_on_empty failed: %s", exc)
         log.debug("Stored reading for %s (bin %s): fill=%.1f%%", payload.bin_id, bin.id, payload.fill_percentage)
 
 
