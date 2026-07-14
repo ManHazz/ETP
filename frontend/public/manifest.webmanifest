@@ -1,7 +1,7 @@
 {
-  "name": "SmartBin",
+  "name": "SmartBin — Predictive Waste Management System",
   "short_name": "SmartBin",
-  "description": "AI-powered predictive waste management dashboard",
+  "description": "AI-powered predictive waste management with real-time fill monitoring, anomaly detection, and route optimization.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
