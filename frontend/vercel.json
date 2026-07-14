@@ -8,7 +8,6 @@
 
   "rewrites": [
     {
-      "//": "Replace <YOUR-RENDER-SERVICE>.onrender.com with the URL Render assigns after the first backend deploy. Vercel doesn't interpolate env vars in destinations, so this is a one-time hardcode.",
       "source": "/api/:path*",
       "destination": "https://smartbin-api-xpsu.onrender.com/api/:path*"
     },
