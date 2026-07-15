@@ -1,0 +1,16 @@
+name: keepalive
+
+# Pings the Render backend every 10 minutes so the free-tier container
+# doesn't sleep. The ESP32 → HiveMQ path is unaffected by sleeps; this
+# only smooths out the dashboard's first HTTP request after idle.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: curl -fsS --max-time 30 https://smartbin-api-xpsu.onrender.com/health
