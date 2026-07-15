@@ -35,25 +35,38 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include "HX711.h"
 
 #include "config.h"
 
-// ── MQTT identity — derived from MAC address at boot ────────────
-// Same firmware runs on every ESP32. Its identity is the last 6 hex
-// digits of the WiFi MAC, prefixed "ESP-", e.g. "ESP-A1B2C3". The
-// backend auto-registers unknown IDs as pending bins for admins to
-// claim in the UI — no per-device config or provisioning needed.
-static char DEVICE_ID[16];
+// ── MQTT identity — random ID stashed in NVS on first boot ─────
+// MAC-derivation was the original plan, but cheap ESP32 dev boards
+// often ship with cloned MAC efuses (same MAC across a factory batch),
+// which breaks fleet uniqueness. Instead we generate a random 32-bit
+// suffix on first boot and persist it to NVS — survives reboots,
+// reflashes, and OTA. Wiped only by `esptool.py erase_flash`.
+static char DEVICE_ID[20];
 static char MQTT_TOPIC[48];
-static char MQTT_CLIENT_ID[24];
+static char MQTT_CLIENT_ID[28];
 
 static void derive_device_id() {
-  uint64_t mac = ESP.getEfuseMac();  // stable per-chip
-  // Take the low 3 bytes (6 hex chars) — collisions across a handful of
-  // devices are astronomically unlikely.
-  snprintf(DEVICE_ID, sizeof(DEVICE_ID), "ESP-%02X%02X%02X",
-           (uint8_t)(mac >> 16), (uint8_t)(mac >> 8), (uint8_t)mac);
+  Preferences prefs;
+  prefs.begin("smartbin", /*readOnly=*/false);
+  String saved = prefs.getString("device_id", "");
+  if (saved.length() > 0) {
+    strncpy(DEVICE_ID, saved.c_str(), sizeof(DEVICE_ID) - 1);
+    DEVICE_ID[sizeof(DEVICE_ID) - 1] = '\0';
+  } else {
+    // esp_random() uses the hardware RNG — good enough for a 32-bit
+    // per-device suffix; collision probability across a fleet of 100 is
+    // roughly 1 in 200 million.
+    uint32_t rnd = esp_random();
+    snprintf(DEVICE_ID, sizeof(DEVICE_ID), "ESP-%08X", rnd);
+    prefs.putString("device_id", DEVICE_ID);
+    Serial.printf("[id] first boot — generated %s and saved to NVS\n", DEVICE_ID);
+  }
+  prefs.end();
   snprintf(MQTT_TOPIC, sizeof(MQTT_TOPIC), "smartbin/%s/telemetry", DEVICE_ID);
   snprintf(MQTT_CLIENT_ID, sizeof(MQTT_CLIENT_ID), "esp32-%s", DEVICE_ID);
 }
