@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import ssl
+import uuid
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
@@ -38,7 +39,10 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME") or None
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD") or None
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "smartbin/+/telemetry")
-MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "smartbin-api")
+# Append a short random suffix so overlapping deploys (or a lingering ghost
+# session from a previous container) don't fight over the same client_id and
+# knock each other off the broker.
+MQTT_CLIENT_ID = f"{os.getenv('MQTT_CLIENT_ID', 'smartbin-api')}-{uuid.uuid4().hex[:8]}"
 MQTT_QOS = int(os.getenv("MQTT_QOS", "1"))
 MQTT_RECONNECT_MIN = int(os.getenv("MQTT_RECONNECT_MIN", "1"))
 MQTT_RECONNECT_MAX = int(os.getenv("MQTT_RECONNECT_MAX", "60"))
