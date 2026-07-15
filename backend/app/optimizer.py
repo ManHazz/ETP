@@ -21,9 +21,9 @@ from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 
 
 DEFAULT_DEPOT = {
-    "label": "Maintenance Depot",
-    "latitude": 4.3845,
-    "longitude": 103.9630,
+    "label": "Chancellor Hall, UTP",
+    "latitude": 4.3862,
+    "longitude": 100.9739,
 }
 
 # Dispatch policy defaults — every one of these is a knob operators can turn.
