@@ -70,7 +70,17 @@ def _on_connect(client, userdata, flags, reason_code, properties=None):
         log.error("MQTT connect failed (reason=%s); paho will retry", reason_code)
 
 
+def _on_subscribe(client, userdata, mid, reason_code_list, properties=None):
+    # Reason codes 0-2 = success (QoS granted). >=128 = failure.
+    codes = [int(rc) for rc in reason_code_list]
+    if any(c >= 128 for c in codes):
+        log.error("MQTT SUBACK DENIED — broker rejected the subscription (codes=%s)", codes)
+    else:
+        log.info("MQTT SUBACK ok (granted qos=%s)", codes)
+
+
 def _on_message(client, userdata, msg):
+    log.info("MQTT rx topic=%s bytes=%d", msg.topic, len(msg.payload))
     try:
         raw = json.loads(msg.payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
@@ -156,6 +166,7 @@ def build_client() -> mqtt.Client:
     # Exponential-ish backoff between reconnect attempts (paho retries forever).
     client.reconnect_delay_set(min_delay=MQTT_RECONNECT_MIN, max_delay=MQTT_RECONNECT_MAX)
     client.on_connect = _on_connect
+    client.on_subscribe = _on_subscribe
     client.on_message = _on_message
     client.on_disconnect = _on_disconnect
     return client
