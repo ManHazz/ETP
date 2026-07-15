@@ -108,6 +108,7 @@ def _handle_message(msg):
 
     with SessionLocal() as db:
         bin = db.scalars(select(Bin).where(Bin.device_id == payload.bin_id)).first()
+        log.info("MQTT parsed bin_id=%s existing_bin=%s", payload.bin_id, bin.id if bin else None)
         if not bin:
             # Auto-register as a pending bin so admin can claim it in the UI.
             # active=False keeps it out of the main list until claimed; pending=True
@@ -125,6 +126,7 @@ def _handle_message(msg):
                 pending=True,
             )
             db.add(bin); db.commit(); db.refresh(bin)
+            log.info("Auto-registered bin id=%s device_id=%s pending=%s", bin.id, bin.device_id, bin.pending)
 
         reading = SensorReading(
             bin_id=bin.id,
