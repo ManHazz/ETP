@@ -371,6 +371,7 @@ def dispatch_decision(
         bins_by_id[b.id] = {
             "bin_id": b.id, "label": b.label,
             "latitude": b.latitude, "longitude": b.longitude,
+            "floor": getattr(b, "floor", 0) or 0,
             "soft_threshold_pct": b.soft_threshold_pct,
             "gas_ppm": latest.gas_ppm if latest else None,
         }
@@ -410,6 +411,7 @@ def get_optimized_route(
         bins_by_id[b.id] = {
             "bin_id": b.id, "label": b.label,
             "latitude": b.latitude, "longitude": b.longitude,
+            "floor": getattr(b, "floor", 0) or 0,
             "soft_threshold_pct": b.soft_threshold_pct,
             "gas_ppm": latest.gas_ppm if latest else None,
         }

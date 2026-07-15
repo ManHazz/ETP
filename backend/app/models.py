@@ -16,6 +16,10 @@ class Bin(Base):
     label: Mapped[str] = mapped_column(String(100))
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
+    # Floor number for bins inside a multi-storey building. 0 = ground.
+    # Bins outside (parks, streets) leave this at 0 and it's a no-op — the
+    # optimizer only splits routes when it sees mixed floor values.
+    floor: Mapped[int] = mapped_column(Integer, default=0)
     capacity_liters: Mapped[float] = mapped_column(Float, default=120.0)
     category: Mapped[str] = mapped_column(String(24), default="other")
     soft_threshold_pct: Mapped[float] = mapped_column(Float, default=40.0)  # opportunistic pickup floor

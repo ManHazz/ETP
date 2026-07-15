@@ -23,6 +23,7 @@ STATEMENTS = [
     ("bins.device_id_idx",      "CREATE UNIQUE INDEX IF NOT EXISTS ix_bins_device_id ON bins (device_id) WHERE device_id IS NOT NULL"),
     ("bins.pending",            "ALTER TABLE bins ADD COLUMN IF NOT EXISTS pending BOOLEAN NOT NULL DEFAULT FALSE"),
     ("bins.pending_idx",        "CREATE INDEX IF NOT EXISTS ix_bins_pending ON bins (pending)"),
+    ("bins.floor",              "ALTER TABLE bins ADD COLUMN IF NOT EXISTS floor INTEGER NOT NULL DEFAULT 0"),
 
     ("collection_logs.weight_at_collection", "ALTER TABLE collection_logs ADD COLUMN IF NOT EXISTS weight_at_collection FLOAT"),
     ("collection_logs.collected_by",         "ALTER TABLE collection_logs ADD COLUMN IF NOT EXISTS collected_by VARCHAR(80)"),

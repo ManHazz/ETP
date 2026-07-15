@@ -25,7 +25,7 @@ export default function AdminView({ bins, onRefresh, user }) {
 function UnclaimedDevices({ onRefresh }) {
   const [pending, setPending] = useState([])
   const [claiming, setClaiming] = useState(null) // pending bin currently being claimed
-  const [form, setForm] = useState({ label: '', latitude: '', longitude: '', capacity_liters: 120, category: 'other', soft_threshold_pct: 40 })
+  const [form, setForm] = useState({ label: '', latitude: '', longitude: '', floor: 0, capacity_liters: 120, category: 'other', soft_threshold_pct: 40 })
   const [busy, setBusy] = useState(false)
 
   const load = () => api.get('/bins/pending').then(setPending).catch(() => setPending([]))
@@ -37,7 +37,7 @@ function UnclaimedDevices({ onRefresh }) {
 
   const startClaim = (b) => {
     setClaiming(b)
-    setForm({ label: '', latitude: '', longitude: '', capacity_liters: 120, category: 'other', soft_threshold_pct: 40 })
+    setForm({ label: '', latitude: '', longitude: '', floor: 0, capacity_liters: 120, category: 'other', soft_threshold_pct: 40 })
   }
   const cancelClaim = () => setClaiming(null)
 
@@ -48,6 +48,7 @@ function UnclaimedDevices({ onRefresh }) {
         label: form.label.trim(),
         latitude: +form.latitude,
         longitude: +form.longitude,
+        floor: +form.floor,
         capacity_liters: +form.capacity_liters,
         category: form.category,
         soft_threshold_pct: +form.soft_threshold_pct,
@@ -80,6 +81,7 @@ function UnclaimedDevices({ onRefresh }) {
             </select>
           </Field>
           <Field label="Capacity (L)"><input className="input" type="number" value={form.capacity_liters} onChange={(e) => setForm(f => ({ ...f, capacity_liters: e.target.value }))} /></Field>
+          <Field label="Floor (0 = ground)"><input className="input" type="number" min="0" max="200" value={form.floor} onChange={(e) => setForm(f => ({ ...f, floor: e.target.value }))} /></Field>
           <Field label="Soft threshold %"><input className="input" type="number" min="0" max="100" value={form.soft_threshold_pct} onChange={(e) => setForm(f => ({ ...f, soft_threshold_pct: e.target.value }))} /></Field>
           <Field label="Latitude" required><input className="input" type="number" step="0.00001" value={form.latitude} onChange={(e) => setForm(f => ({ ...f, latitude: e.target.value }))} required /></Field>
           <Field label="Longitude" required><input className="input" type="number" step="0.00001" value={form.longitude} onChange={(e) => setForm(f => ({ ...f, longitude: e.target.value }))} required /></Field>
@@ -116,7 +118,7 @@ function UnclaimedDevices({ onRefresh }) {
 
 function BinForm({ onRefresh }) {
   const [form, setForm] = useState({
-    label: '', latitude: '', longitude: '',
+    label: '', latitude: '', longitude: '', floor: 0,
     capacity_liters: 120, category: 'other',
     soft_threshold_pct: 40, description: '',
   })
@@ -130,13 +132,14 @@ function BinForm({ onRefresh }) {
       await api.post('/bins', {
         label: form.label.trim(),
         latitude: +form.latitude, longitude: +form.longitude,
+        floor: +form.floor,
         capacity_liters: +form.capacity_liters,
         category: form.category,
         soft_threshold_pct: +form.soft_threshold_pct,
         description: form.description.trim() || null,
       })
       setMsg({ type: 'ok', text: 'Bin registered.' })
-      setForm({ label: '', latitude: '', longitude: '', capacity_liters: 120, category: 'other', soft_threshold_pct: 40, description: '' })
+      setForm({ label: '', latitude: '', longitude: '', floor: 0, capacity_liters: 120, category: 'other', soft_threshold_pct: 40, description: '' })
       onRefresh?.()
     } catch (err) { setMsg({ type: 'err', text: err.message }) }
     finally { setBusy(false) }
@@ -165,6 +168,7 @@ function BinForm({ onRefresh }) {
         onChange={(la, ln) => setForm((f) => ({ ...f, latitude: la, longitude: ln }))}
       />
       <Field label="Capacity (L)"><input className="input" type="number" value={form.capacity_liters} onChange={set('capacity_liters')} /></Field>
+      <Field label="Floor (0 = ground)"><input className="input" type="number" min="0" max="200" value={form.floor} onChange={set('floor')} /></Field>
       <Field label="Soft threshold %"><input className="input" type="number" value={form.soft_threshold_pct} onChange={set('soft_threshold_pct')} min="0" max="100" /></Field>
       <Field label="Description"><input className="input" value={form.description} onChange={set('description')} placeholder="Near entrance" /></Field>
 

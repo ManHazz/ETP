@@ -10,6 +10,9 @@ class BinCreate(BaseModel):
     label: str = Field(examples=["Cafeteria Block A"])
     latitude: float = Field(examples=[4.5985])
     longitude: float = Field(examples=[101.0901])
+    # 0 = ground floor, 1/2/3 etc for upper floors. Only matters for indoor
+    # deployments; outdoor bins can leave it at 0.
+    floor: int = Field(default=0)
     capacity_liters: float = Field(default=120.0)
     category: str = Field(default="other")
     soft_threshold_pct: float = Field(default=40.0, ge=0, le=100)
@@ -38,6 +41,7 @@ class BinClaimRequest(BaseModel):
     label: str = Field(min_length=1, max_length=100)
     latitude: float
     longitude: float
+    floor: int = Field(default=0)
     capacity_liters: float = Field(default=120.0)
     category: str = Field(default="other")
     soft_threshold_pct: float = Field(default=40.0, ge=0, le=100)
@@ -56,6 +60,7 @@ class BinStatus(BaseModel):
     label: str
     latitude: float
     longitude: float
+    floor: int = 0
     capacity_liters: float
     category: str = "other"
     soft_threshold_pct: float = 40.0
