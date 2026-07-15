@@ -75,23 +75,75 @@ class RateSignal:
     source: str
 
 
-def _recent_trend(readings: list[SensorReading], bin: Bin) -> RateSignal:
-    if len(readings) < 2:
-        return RateSignal(None, 0.0, "recent-trend")
-    t0 = readings[0].timestamp
+def _slope_over(readings: list[SensorReading], bin: Bin, hours_back: float) -> tuple[float | None, int]:
+    """Linear slope over the last `hours_back` hours. Returns (slope, sample_count)."""
+    if not readings:
+        return None, 0
+    now_ref = readings[-1].timestamp
+    cutoff = now_ref - timedelta(hours=hours_back)
     xs, ys = [], []
+    t0 = None
     for r in readings:
+        if r.timestamp < cutoff:
+            continue
         eff = compute_effective_fill(r.fill_level_pct, r.weight_kg, r.gas_ppm, bin.capacity_liters)
         if eff is None:
             continue
+        if t0 is None:
+            t0 = r.timestamp
         xs.append((r.timestamp - t0).total_seconds() / 3600)
         ys.append(eff)
-    slope = _linear_slope(xs, ys)
+    if len(xs) < 2:
+        return None, len(xs)
+    return _linear_slope(xs, ys), len(xs)
+
+
+def _recent_trend(readings: list[SensorReading], bin: Bin) -> RateSignal:
+    """
+    Uses two windows — the last hour and the last 12 hours — and returns the
+    faster of the two if they diverge sharply. That way a bin that just started
+    filling rapidly (or just stopped filling) reacts within one hour instead of
+    being averaged out by a stale 12-hour trend.
+    """
+    long_slope, long_n = _slope_over(readings, bin, hours_back=TREND_LOOKBACK_HOURS)
+    short_slope, short_n = _slope_over(readings, bin, hours_back=1.0)
+
+    # Prefer the short-window slope when we have enough recent samples AND it
+    # disagrees with the long window by >30%. Otherwise fall back to the
+    # smoother long-window slope.
+    slope = long_slope
+    if short_slope is not None and short_n >= 3 and long_slope is not None:
+        if abs(short_slope - long_slope) / max(abs(long_slope), 0.5) > 0.3:
+            slope = short_slope
+
     if slope is None:
         return RateSignal(None, 0.0, "recent-trend")
-    # More samples = more confidence; cap at 1.0
-    conf = min(len(xs) / 15, 1.0)
+    conf = min(long_n / 15, 1.0)
     return RateSignal(max(slope, 0.0), conf, "recent-trend")
+
+
+def _trend_state(readings: list[SensorReading], bin: Bin, current_eff: float | None) -> str:
+    """
+    Classify how the fill rate is changing right now.
+
+      accelerating — filling much faster than the 12h average
+      slowing      — filling noticeably slower than the 12h average
+      stalled      — barely moving (rate under ~0.3 %/h for 1h+)
+      steady       — filling at roughly the same rate as the 12h average
+      unknown      — not enough data
+    """
+    long_slope, long_n = _slope_over(readings, bin, hours_back=TREND_LOOKBACK_HOURS)
+    short_slope, short_n = _slope_over(readings, bin, hours_back=1.0)
+    if short_slope is None or short_n < 3:
+        return "unknown"
+    if short_slope < 0.3:
+        return "stalled"
+    if long_slope is None or long_n < 3:
+        return "steady"
+    ratio = short_slope / max(long_slope, 0.1)
+    if ratio > 1.5: return "accelerating"
+    if ratio < 0.5: return "slowing"
+    return "steady"
 
 
 def _historical_rate(db: Session, bin: Bin, now: datetime) -> RateSignal:
@@ -193,8 +245,16 @@ def predict_bin_fill(db: Session, bin: Bin, threshold: float = 80.0) -> dict:
     trend = _recent_trend(readings, bin)
     historical = _historical_rate(db, bin, now)
     prior = _category_prior(bin)
+    state = _trend_state(readings, bin, current_eff)
 
     slope, conf = _blend([trend, historical, prior])
+
+    # If the recent behaviour disagrees strongly with the blended average,
+    # shade confidence downward — the world just changed on us.
+    if state in ("slowing", "accelerating"):
+        conf = max(conf * 0.7, 0.15)
+    elif state == "stalled":
+        conf = max(conf * 0.5, 0.1)
 
     # Weather and event adjustments
     weather = get_weather(bin.latitude, bin.longitude)
@@ -202,7 +262,10 @@ def predict_bin_fill(db: Session, bin: Bin, threshold: float = 80.0) -> dict:
     effective_slope = slope * weather.fill_multiplier * event_mult
 
     # Rate → time until threshold
-    if current_eff is None or effective_slope <= 0.05:
+    if current_eff is None or effective_slope <= 0.05 or state == "stalled":
+        # No usable rate, OR the bin has just gone quiet. Report the situation
+        # explicitly so the UI can show "not filling right now" rather than
+        # silently falling back to a stale earlier estimate.
         hours_until = None
         pred_at = None
         band = (None, None)
@@ -214,8 +277,12 @@ def predict_bin_fill(db: Session, bin: Bin, threshold: float = 80.0) -> dict:
         gap = threshold - current_eff
         hours_until = gap / effective_slope
         pred_at = now + timedelta(hours=hours_until)
-        # Uncertainty band: widen when confidence is low.
-        widen = max(0.15, 1.0 - conf)  # 15% at high confidence, up to 100% at low
+        # Uncertainty band: widen when confidence is low. Widen further when
+        # the trend is diverging (accelerating / slowing) — the point estimate
+        # is more suspect the more recent behaviour has changed.
+        widen = max(0.15, 1.0 - conf)
+        if state in ("slowing", "accelerating"):
+            widen = min(widen * 1.5, 1.0)
         band = (max(hours_until * (1 - widen), 0.0), hours_until * (1 + widen))
 
     signals_used = [s.source for s in (trend, historical, prior) if s.slope is not None and s.confidence > 0]
@@ -232,6 +299,7 @@ def predict_bin_fill(db: Session, bin: Bin, threshold: float = 80.0) -> dict:
         "hours_until_full_high": round(band[1], 1) if band[1] is not None else None,
         "predicted_full_at": pred_at.isoformat() if pred_at else None,
         "confidence": _confidence_label(conf),
+        "trend_state": state,
         "signals_used": signals_used,
         "weather": {
             "summary": weather.summary,
