@@ -71,15 +71,28 @@ def _on_connect(client, userdata, flags, reason_code, properties=None):
 
 
 def _on_subscribe(client, userdata, mid, reason_code_list, properties=None):
-    # Reason codes 0-2 = success (QoS granted). >=128 = failure.
-    codes = [int(rc) for rc in reason_code_list]
-    if any(c >= 128 for c in codes):
-        log.error("MQTT SUBACK DENIED — broker rejected the subscription (codes=%s)", codes)
-    else:
-        log.info("MQTT SUBACK ok (granted qos=%s)", codes)
+    # paho v2 hands us ReasonCode objects, not ints. Read .value for the code.
+    # 0-2 = success (QoS granted). >=128 = failure.
+    try:
+        codes = [getattr(rc, "value", rc) for rc in reason_code_list]
+        if any(int(c) >= 128 for c in codes):
+            log.error("MQTT SUBACK DENIED — broker rejected the subscription (codes=%s)", codes)
+        else:
+            log.info("MQTT SUBACK ok (granted qos=%s)", codes)
+    except Exception as exc:
+        # Never let a callback crash the paho loop thread.
+        log.exception("on_subscribe callback error: %s", exc)
 
 
 def _on_message(client, userdata, msg):
+    # Catch-all so a bad payload or DB hiccup never kills the paho loop thread.
+    try:
+        _handle_message(msg)
+    except Exception as exc:
+        log.exception("on_message callback error on %s: %s", msg.topic, exc)
+
+
+def _handle_message(msg):
     log.info("MQTT rx topic=%s bytes=%d", msg.topic, len(msg.payload))
     try:
         raw = json.loads(msg.payload.decode("utf-8"))
