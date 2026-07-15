@@ -196,8 +196,11 @@ def delete_bin(bin_id: int, db: Session = Depends(get_db), _: User = Depends(req
     bin = db.get(Bin, bin_id)
     if not bin:
         raise HTTPException(404, "Bin not found")
-    # Soft delete — preserves history & FK integrity
+    # Soft delete — preserves history & FK integrity. Also clear pending
+    # so deleting an unclaimed bin actually removes it from the Unclaimed
+    # panel (otherwise pending stays true and the row keeps appearing).
     bin.active = False
+    bin.pending = False
     db.commit()
 
 
