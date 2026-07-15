@@ -5,12 +5,12 @@ import EmptyState from '../components/EmptyState'
 import { timeAgo } from '../utils'
 
 const KIND_META = {
-  dead:        { label: 'Dead node',    icon: 'warn', color: 'var(--danger)' },
-  stuck:       { label: 'Stuck sensor', icon: 'warn', color: 'var(--warning)' },
-  spike:       { label: 'Fill spike',   icon: 'warn', color: 'var(--warning)' },
-  low_battery: { label: 'Low battery',  icon: 'battery', color: 'var(--warning)' },
-  gas_hazard:  { label: 'Gas hazard',   icon: 'gas', color: 'var(--danger)' },
-  tamper:      { label: 'Possible tamper', icon: 'warn', color: 'var(--warning)' },
+  dead:        { label: 'Bin offline',    icon: 'warn', color: 'var(--danger)' },
+  stuck:       { label: 'Sensor stuck',   icon: 'warn', color: 'var(--warning)' },
+  spike:       { label: 'Sudden fill jump', icon: 'warn', color: 'var(--warning)' },
+  low_battery: { label: 'Low battery',    icon: 'battery', color: 'var(--warning)' },
+  gas_hazard:  { label: 'Bad smell / gas', icon: 'gas', color: 'var(--danger)' },
+  tamper:      { label: 'Possibly moved', icon: 'warn', color: 'var(--warning)' },
 }
 
 export default function AnomaliesView({ bins }) {
@@ -43,18 +43,18 @@ export default function AnomaliesView({ bins }) {
     <div className="stack">
       <div className="between">
         <div>
-          <div className="page-title">Anomalies</div>
-          <div className="page-subtitle">Sensor issues, tamper events, gas hazards</div>
+          <div className="page-title">Issues</div>
+          <div className="page-subtitle">Sensor problems, gas alerts, or bins that may have been moved</div>
         </div>
         <button className="btn btn-ghost" onClick={scan} disabled={scanning}>
-          <Icon name="refresh" size={16} /> {scanning ? 'Scanning…' : 'Rescan now'}
+          <Icon name="refresh" size={16} /> {scanning ? 'Checking…' : 'Check now'}
         </button>
       </div>
 
       {loading ? (
         <div className="card skeleton" style={{ height: 120 }} />
       ) : anomalies.length === 0 ? (
-        <EmptyState icon="check" title="All quiet" message="No open anomalies right now." />
+        <EmptyState icon="check" title="All good" message="No issues right now." />
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {anomalies.map((a, i) => {

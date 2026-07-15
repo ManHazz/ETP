@@ -38,27 +38,20 @@ function Shell({ user, onLogout, theme, toggleTheme }) {
   const { canInstall, promptInstall } = useInstallPrompt()
   const { route, navigate } = useHashRoute()
 
-  const [search, setSearch] = useState('')
   const [detailBin, setDetailBin] = useState(null)
 
   const openBin = (bin) => setDetailBin(bin)
   const closeBin = () => setDetailBin(null)
-
-  useEffect(() => { if (route === 'route' || route === 'map') setSearch('') }, [route])
 
   // Non-admins get bumped away from /admin
   useEffect(() => {
     if (route === 'admin' && user.role !== 'admin') navigate('dashboard')
   }, [route, user.role, navigate])
 
-  const showSearch = route === 'bins' || route === 'dashboard'
-
   return (
     <div className="shell">
       <Sidebar route={route} onNavigate={navigate} user={user} onLogout={onLogout} />
       <Topbar
-        showSearch={showSearch}
-        search={search} setSearch={setSearch}
         lastUpdated={lastUpdated} error={error} online={online}
         theme={theme} onToggleTheme={toggleTheme}
         canInstall={canInstall} onInstall={promptInstall}
@@ -69,7 +62,7 @@ function Shell({ user, onLogout, theme, toggleTheme }) {
           <OfflineBanner online={online} />
           <AlertToasts bins={bins} />
           {route === 'dashboard'   && <DashboardView bins={bins} loading={loading} onOpenBin={openBin} onNavigate={navigate} />}
-          {route === 'bins'        && <BinsView bins={bins} loading={loading} search={search} onOpenBin={openBin} />}
+          {route === 'bins'        && <BinsView bins={bins} loading={loading} onOpenBin={openBin} />}
           {route === 'map'         && <MapPage bins={bins} loading={loading} onOpen={openBin} />}
           {route === 'route'       && <RoutePage />}
           {route === 'analytics'   && <AnalyticsView bins={bins} loading={loading} />}
@@ -96,7 +89,7 @@ function MapPage({ bins, loading, onOpen }) {
     <div className="stack">
       <div>
         <div className="page-title">Map</div>
-        <div className="page-subtitle">All bins by location · tap a marker for details</div>
+        <div className="page-subtitle">All bins on the map · tap a pin for details</div>
       </div>
       {loading ? <div className="card skeleton" style={{ height: 400 }} /> : <MapView bins={bins || []} onOpen={onOpen} />}
     </div>
@@ -107,8 +100,8 @@ function RoutePage() {
   return (
     <div className="stack">
       <div>
-        <div className="page-title">Collection route</div>
-        <div className="page-subtitle">Optimized pickup order — gated by the dispatch policy</div>
+        <div className="page-title">Pickup route</div>
+        <div className="page-subtitle">The best pickup order for your team</div>
       </div>
       <RouteView />
     </div>

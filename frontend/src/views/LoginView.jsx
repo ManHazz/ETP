@@ -4,9 +4,9 @@ import GoogleButton from '../components/GoogleButton'
 import { fetchAuthConfig } from '../api'
 
 const FEATURES = [
-  { icon: 'route',       title: 'Smart dispatch',  desc: 'Batches pickups so trucks never roll for a single bin.' },
-  { icon: 'analytics',   title: 'Live predictions', desc: 'Weather + history + events blended into every forecast.' },
-  { icon: 'warn',        title: 'Anomaly alerts',   desc: 'Stuck sensors, tampering and gas hazards surface instantly.' },
+  { icon: 'route',       title: 'Smart pickups',   desc: 'Groups bins together so pickup trips are never wasted.' },
+  { icon: 'analytics',   title: 'Smart forecast',  desc: 'Uses weather, history, and events to predict when bins fill up.' },
+  { icon: 'warn',        title: 'Instant alerts',  desc: 'Broken sensors, moved bins, or bad smells show up right away.' },
 ]
 
 export default function LoginView({ onLogin, onRegister, onGoogle }) {
@@ -58,10 +58,10 @@ function HeroPanel() {
       </div>
 
       <div className="auth-hero-body">
-        <div className="auth-hero-title">The dispatch console for smarter waste ops.</div>
+        <div className="auth-hero-title">Smarter bin pickups, less wasted trips.</div>
         <div className="auth-hero-sub">
-          Live telemetry, weather-adjusted predictions, and a policy engine that decides
-          when a truck should actually roll — so you save fuel, hours, and headaches.
+          Live bin fill levels, smart forecasts using weather and history, and a helper
+          that tells you when a pickup is worth doing — save time, fuel, and effort.
         </div>
 
         <div className="auth-features">

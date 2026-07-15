@@ -53,15 +53,15 @@ export default function DispatchPanel({ onGenerateRoute }) {
             }}><Icon name={should ? 'route' : 'clock'} size={20} /></div>
             <div>
               <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>
-                {loading ? 'Analysing…' :
-                  decision?.hazard_count > 0 ? 'Hazard — dispatch now' :
-                  should ? 'Recommended: dispatch' : 'Recommended: wait'}
+                {loading ? 'Checking…' :
+                  decision?.hazard_count > 0 ? 'Urgent — pick up now' :
+                  should ? 'Ready to pick up' : 'Wait for more bins'}
               </div>
-              <div style={{ fontSize: '.82rem', color: 'var(--text-secondary)' }}>Live dispatch policy engine</div>
+              <div style={{ fontSize: '.82rem', color: 'var(--text-secondary)' }}>Smart pickup suggestion</div>
             </div>
           </div>
           {should && <button className="btn btn-primary" onClick={onGenerateRoute}>
-            <Icon name="route" size={16} /> Build route
+            <Icon name="route" size={16} /> See route
           </button>}
         </div>
 
@@ -75,11 +75,11 @@ export default function DispatchPanel({ onGenerateRoute }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 'var(--sp-3)' }}>
             <MiniStat label="Must pick up" value={decision.must_pickup.length} tone="danger" />
             <MiniStat label="On the route" value={decision.recommended_pickup.length} tone="brand" />
-            <MiniStat label="Deferred" value={decision.deferred.length} tone="warning" />
+            <MiniStat label="Can wait" value={decision.deferred.length} tone="warning" />
             <MiniStat label="Est. cost" value={decision.cost_estimate > 0 ? `RM ${decision.cost_estimate.toFixed(2)}` : '—'} tone="accent" />
             <MiniStat label="Per bin" value={decision.cost_per_bin > 0 ? `RM ${decision.cost_per_bin.toFixed(2)}` : '—'} tone="accent" />
             {decision.next_check_at_hours != null && (
-              <MiniStat label="Recheck in" value={`${decision.next_check_at_hours.toFixed(1)}h`} tone="warning" />
+              <MiniStat label="Check again in" value={`${decision.next_check_at_hours.toFixed(1)}h`} tone="warning" />
             )}
           </div>
         )}
@@ -87,7 +87,7 @@ export default function DispatchPanel({ onGenerateRoute }) {
 
       {decision?.picks?.length > 0 && (
         <div style={{ padding: 'var(--sp-4) var(--sp-5)' }}>
-          <div className="label" style={{ marginBottom: 8 }}>Pickups on the recommended route</div>
+          <div className="label" style={{ marginBottom: 8 }}>Bins on this route</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {decision.picks.map((p) => (
               <div key={p.bin_id} className="between" style={{ padding: 'var(--sp-2) var(--sp-3)', background: 'var(--bg-sunken)', borderRadius: 'var(--r-sm)', fontSize: '.85rem' }}>
@@ -106,18 +106,18 @@ export default function DispatchPanel({ onGenerateRoute }) {
 
       <details style={{ padding: 'var(--sp-4) var(--sp-5)', borderTop: '1px solid var(--border)' }}>
         <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-secondary)' }}>
-          Adjust dispatch policy
+          Change settings
         </summary>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--sp-3)', marginTop: 'var(--sp-3)' }}>
-          <Knob label="Hard threshold %" value={policy.hard_threshold} onChange={set('hard_threshold')} />
-          <Knob label="Soft threshold %" value={policy.soft_threshold} onChange={set('soft_threshold')} />
-          <Knob label="Min bins to dispatch" value={policy.min_bins} onChange={set('min_bins')} />
-          <Knob label="Top-up radius km" value={policy.topup_radius_km} step="0.1" onChange={set('topup_radius_km')} />
-          <Knob label="Grace window hours" value={policy.grace_hours} onChange={set('grace_hours')} />
+          <Knob label="Must pick up at %" value={policy.hard_threshold} onChange={set('hard_threshold')} />
+          <Knob label="OK to pick up at %" value={policy.soft_threshold} onChange={set('soft_threshold')} />
+          <Knob label="Min bins per trip" value={policy.min_bins} onChange={set('min_bins')} />
+          <Knob label="Include nearby (km)" value={policy.topup_radius_km} step="0.1" onChange={set('topup_radius_km')} />
+          <Knob label="Wait window (hours)" value={policy.grace_hours} onChange={set('grace_hours')} />
           <Knob label="Cost per km (RM)" value={policy.cost_per_km} step="0.1" onChange={set('cost_per_km')} />
           <Knob label="Cost per stop (RM)" value={policy.cost_per_stop} step="0.5" onChange={set('cost_per_stop')} />
         </div>
-        <button className="btn btn-ghost" onClick={apply} style={{ marginTop: 12 }}>Recompute</button>
+        <button className="btn btn-ghost" onClick={apply} style={{ marginTop: 12 }}>Update</button>
       </details>
     </div>
   )

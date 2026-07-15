@@ -26,16 +26,16 @@ export default function CollectionsView({ bins }) {
   return (
     <div className="stack">
       <div>
-        <div className="page-title">Collections</div>
-        <div className="page-subtitle">Predicted pickups + full history from the backend</div>
+        <div className="page-title">Pickups</div>
+        <div className="page-subtitle">Bins expected to fill soon and your pickup history</div>
       </div>
 
       <section>
-        <div className="label" style={{ marginBottom: 12 }}>Predicted next 24h (with confidence)</div>
+        <div className="label" style={{ marginBottom: 12 }}>Bins likely to fill in the next 24 hours</div>
         {loading ? (
           <div className="card skeleton" style={{ height: 80 }} />
         ) : upcoming.length === 0 ? (
-          <div className="card" style={{ padding: 'var(--sp-5)', color: 'var(--text-muted)' }}>Nothing predicted to fill in the next 24h.</div>
+          <div className="card" style={{ padding: 'var(--sp-5)', color: 'var(--text-muted)' }}>No bins expected to fill up in the next 24 hours.</div>
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             {upcoming.map((p, i) => (
@@ -44,17 +44,17 @@ export default function CollectionsView({ bins }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '.9rem' }}>{p.label}</div>
                   <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>
-                    Now {p.current_effective_fill?.toFixed(0) ?? '—'}% · rate {p.fill_rate_per_hour?.toFixed(1) ?? '—'}%/h · {p.confidence} confidence
+                    Now {p.current_effective_fill?.toFixed(0) ?? '—'}% · filling {p.fill_rate_per_hour?.toFixed(1) ?? '—'}%/hour · {p.confidence} confidence
                     {p.event ? ` · event: ${p.event}` : ''}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div className="chip" style={{ background: p.hours_until_full <= 1 ? 'var(--danger)' : 'var(--grad-brand)', color: 'white' }}>
-                    {p.hours_until_full <= 1 ? 'NOW' : `~${p.hours_until_full}h`}
+                    {p.hours_until_full <= 1 ? 'Fills now' : `Full in ~${p.hours_until_full}h`}
                   </div>
                   {p.hours_until_full_low != null && p.hours_until_full_high != null && (
                     <div style={{ fontSize: '.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 3 }}>
-                      {p.hours_until_full_low.toFixed(1)}–{p.hours_until_full_high.toFixed(1)}h
+                      Between {p.hours_until_full_low.toFixed(1)}–{p.hours_until_full_high.toFixed(1)}h
                     </div>
                   )}
                 </div>
@@ -65,11 +65,11 @@ export default function CollectionsView({ bins }) {
       </section>
 
       <section>
-        <div className="label" style={{ marginBottom: 12 }}>Collection log</div>
+        <div className="label" style={{ marginBottom: 12 }}>Pickup history</div>
         {loading ? (
           <div className="card skeleton" style={{ height: 80 }} />
         ) : !logs?.length ? (
-          <EmptyState icon="collections" title="No collections yet" message="Mark a bin as collected from its detail sheet to see it here." />
+          <EmptyState icon="collections" title="No pickups yet" message="Mark a bin as picked up from its details to see it here." />
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             {logs.map((l, i) => (

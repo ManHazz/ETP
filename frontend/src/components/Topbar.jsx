@@ -1,7 +1,6 @@
 import Icon from './Icon'
 
 export default function Topbar({
-  search, setSearch, showSearch,
   lastUpdated, error, online,
   theme, onToggleTheme,
   canInstall, onInstall, onRefresh,
@@ -12,18 +11,6 @@ export default function Topbar({
         <div className="topbar-brand-mark"><Icon name="bins" size={16} /></div>
         SmartBin
       </div>
-      {showSearch && (
-        <div className="search">
-          <Icon name="search" size={16} className="search-icon" />
-          <input
-            className="input"
-            type="search"
-            placeholder="Search bins by name…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 'var(--r-full)', background: 'var(--bg-sunken)', fontSize: '.72rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
           <span style={{

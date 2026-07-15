@@ -1,13 +1,13 @@
 import Icon from './Icon'
 
 export const NAV_ITEMS = [
-  { id: 'dashboard',   label: 'Dashboard',   icon: 'dashboard'   },
+  { id: 'dashboard',   label: 'Home',        icon: 'dashboard'   },
   { id: 'bins',        label: 'Bins',        icon: 'bins'        },
   { id: 'map',         label: 'Map',         icon: 'map'         },
   { id: 'route',       label: 'Route',       icon: 'route'       },
-  { id: 'analytics',   label: 'Analytics',   icon: 'analytics'   },
-  { id: 'collections', label: 'Collections', icon: 'collections' },
-  { id: 'anomalies',   label: 'Anomalies',   icon: 'warn'        },
+  { id: 'analytics',   label: 'Stats',       icon: 'analytics'   },
+  { id: 'collections', label: 'Pickups',     icon: 'collections' },
+  { id: 'anomalies',   label: 'Issues',      icon: 'warn'        },
   { id: 'admin',       label: 'Admin',       icon: 'admin', role: 'admin' },
   { id: 'settings',    label: 'Settings',    icon: 'settings'    },
 ]
@@ -20,7 +20,7 @@ export default function Sidebar({ route, onNavigate, user, onLogout }) {
         <div className="sidebar-brand-mark"><Icon name="bins" size={18} /></div>
         <div>
           <div>SmartBin</div>
-          <div style={{ fontSize: '.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Waste Ops Console</div>
+          <div style={{ fontSize: '.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Smart bin control</div>
         </div>
       </div>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

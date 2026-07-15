@@ -13,22 +13,18 @@ const sorts = {
 
 const FILTERS = ['all', 'critical', 'warning', 'normal', 'offline']
 
-export default function BinsView({ bins, loading, search, onOpenBin }) {
+export default function BinsView({ bins, loading, onOpenBin }) {
   const [sort, setSort] = useState('fill')
   const [filter, setFilter] = useState('all')
 
   const visible = useMemo(() => {
     if (!bins) return []
     let list = [...bins]
-    if (search) {
-      const q = search.toLowerCase()
-      list = list.filter((b) => b.label.toLowerCase().includes(q))
-    }
     if (filter !== 'all') {
       list = list.filter((b) => getStatus(b.effective_fill).level === filter)
     }
     return list.sort(sorts[sort])
-  }, [bins, sort, filter, search])
+  }, [bins, sort, filter])
 
   if (loading) return <SkeletonGrid />
 
@@ -56,7 +52,7 @@ export default function BinsView({ bins, loading, search, onOpenBin }) {
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon="search" title="No bins match" message="Try adjusting the search or filters." />
+        <EmptyState icon="search" title="No bins match" message="Try picking a different filter above." />
       ) : (
         <div className="grid-cards">
           {visible.map((b) => <BinCard key={b.id} bin={b} onOpen={onOpenBin} />)}

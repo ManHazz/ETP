@@ -39,10 +39,10 @@ export default function MapView({ bins, onOpen }) {
               <Popup>
                 <div style={{ fontFamily: 'var(--font-ui)', fontSize: '.85rem' }}>
                   <strong>{bin.label}</strong>
-                  <div>Effective: {bin.effective_fill?.toFixed(0) ?? '—'}%</div>
-                  <div>Raw: {bin.fill_level_pct?.toFixed(0) ?? '—'}%</div>
+                  <div>Fill level: {bin.effective_fill?.toFixed(0) ?? '—'}%</div>
+                  <div>Sensor reading: {bin.fill_level_pct?.toFixed(0) ?? '—'}%</div>
                   <div>Weight: {bin.weight_kg?.toFixed(1) ?? '—'} kg</div>
-                  <div>Gas: {bin.gas_ppm?.toFixed(0) ?? '—'} ppm</div>
+                  <div>Air quality: {bin.gas_ppm?.toFixed(0) ?? '—'} ppm</div>
                 </div>
               </Popup>
             </CircleMarker>
